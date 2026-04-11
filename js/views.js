@@ -35,6 +35,7 @@ V['dashboard']=()=>{
       <td style="font-size:10px;color:var(--text-2)">${detail}</td>
       <td><div style="display:flex;gap:2px">${avs}</div></td>
       <td>${stat}</td>
+      <td style="font-size:11px;color:var(--text-2)">${ap.step !== undefined && ap.step !== null ? STEPS[Math.min(ap.step,STEPS.length-1)].s : (ap.statut==='Planifié'?'—':'En cours')}</td>
       <td><div class="pbar" style="width:80px"><div class="pfill" style="width:${pct}%"></div></div>
       <div style="font-size:10px;color:var(--text-3)">${pct}%</div></td>
       </tr>`;
@@ -59,7 +60,7 @@ V['dashboard']=()=>{
   html+='<div style="margin-bottom:1.25rem">';
   html+=`<div class="sth"><div class="st">Audits ${CY}</div><button class="bs" style="font-size:11px" onclick="nav('mes-audits')">Voir tout</button></div>`;
   html+='<div class="tw"><table>';
-  html+='<thead><tr><th>Titre</th><th>Type</th><th>Détail</th><th>Auditeurs</th><th>Statut</th><th>Avancement</th></tr></thead>';
+  html+='<thead><tr><th>Titre</th><th>Type</th><th>Détail</th><th>Auditeurs</th><th>Statut</th><th>Étape</th><th>Avancement</th></tr></thead>';
   html+='<tbody>'+auditRows+'</tbody></table></div></div>';
   html+='<div class="sth"><div class="st">Plans d\'action urgents</div><button class="bs" style="font-size:11px" onclick="nav(\'plans-action\')">Voir tout</button></div>';
   html+='<div>'+lateRows+'</div>';
