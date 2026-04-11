@@ -1,137 +1,108 @@
-// ============================================================
-// AUDITFLOW — MODE DÉMO avec login ID/Mot de passe
-// ============================================================
+async function initLogin(){
+  document.getElementById('ls').style.display='flex';
+  document.getElementById('app').style.display='none';
+  document.getElementById('li-btn').onclick=doLogin;
+  document.getElementById('li-pw').onkeydown=function(e){if(e.key==='Enter')doLogin();};
+  document.getElementById('li-em').onkeydown=function(e){if(e.key==='Enter')document.getElementById('li-pw').focus();};
+  document.getElementById('li-pw').oninput=validatePwd;
+  document.getElementById('li-pw').onfocus=function(){document.getElementById('pw-rules').style.display='block';};
 
-const DEMO_USERS = [
-  { id:'pm', name:'Philippe M.', email:'pmassard@74Software.com', password:'audit2025', role:'admin',    initials:'PM', title:'Directeur Audit Interne' },
-  { id:'sh', name:'Selma H.',    email:'shentabli@74Software.com',      password:'audit2025', role:'auditeur', initials:'SH', title:'Auditrice' },
-  { id:'ne', name:'Nisrine E.',  email:'nechah@74Software.com',       password:'audit2025', role:'auditeur', initials:'NE', title:'Auditrice' },
-];
-
-const AV_CSS = {
-  pm: 'background:#CECBF6;color:#3C3489',
-  sh: 'background:#9FE1CB;color:#085041',
-  ne: 'background:#B5D4F4;color:#0C447C',
-};
-
-let currentView = 'dashboard';
-
-async function initApp() {
-  document.getElementById('login-screen').style.display = 'flex';
-  document.getElementById('app').style.display = 'none';
-
-  document.getElementById('login-btn').addEventListener('click', handleLogin);
-  document.getElementById('login-password').addEventListener('keydown', e => { if(e.key==='Enter') handleLogin(); });
-  document.getElementById('login-email').addEventListener('keydown', e => { if(e.key==='Enter') handleLogin(); });
-
-  // Pré-remplit avec Philippe pour la démo
-  document.getElementById('login-email').value = 'philippe.massard@groupe.com';
-  document.getElementById('login-password').value = 'audit2025';
+  try {
+    await loadAllData();
+    console.log('Supabase connecté — données chargées');
+  } catch(e) {
+    console.warn('Supabase non disponible, mode local');
+  }
 }
 
-function handleLogin() {
-  const email = document.getElementById('login-email').value.trim().toLowerCase();
-  const password = document.getElementById('login-password').value;
-  const errEl = document.getElementById('login-error');
+function togglePwd(){
+  var inp=document.getElementById('li-pw');
+  inp.type=inp.type==='password'?'text':'password';
+}
 
-  const user = DEMO_USERS.find(u => u.email.toLowerCase() === email && u.password === password);
+function validatePwd(){
+  var v=document.getElementById('li-pw').value;
+  var rLen=v.length>=8;
+  var rMaj=/[A-Z]/.test(v);
+  var rSpec=/[^a-zA-Z0-9]/.test(v);
+  var set=function(id,ok){var el=document.getElementById(id);el.style.color=ok?'var(--green)':'var(--text-3)';el.textContent=(ok?'✓ ':'✗ ')+el.textContent.slice(2);};
+  set('r-len',rLen); set('r-maj',rMaj); set('r-spec',rSpec);
+}
 
-  if (!user) {
-    errEl.textContent = 'Email ou mot de passe incorrect.';
-    errEl.style.display = 'block';
-    document.getElementById('login-password').value = '';
+async function doLogin(){
+  var email=document.getElementById('li-em').value.trim().toLowerCase();
+  var pwd=document.getElementById('li-pw').value;
+  var errEl=document.getElementById('li-err');
+
+  if(pwd.length<8||!/[A-Z]/.test(pwd)||!/[^a-zA-Z0-9]/.test(pwd)){
+    errEl.textContent='Le mot de passe doit contenir 8 caractères min., 1 majuscule et 1 caractère spécial.';
+    errEl.style.display='block';
     return;
   }
 
-  errEl.style.display = 'none';
-  STATE.user = { ...user };
-  launchApp(user);
-}
-
-function launchApp(user) {
-  document.getElementById('login-screen').style.display = 'none';
-  document.getElementById('app').style.display = 'flex';
-  if (user.role === 'admin') document.getElementById('app').classList.add('is-admin');
-
-  // Sidebar user chip
-  const avEl = document.getElementById('user-av');
-  avEl.textContent = user.initials;
-  avEl.style.cssText = `${AV_CSS[user.id]};width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600`;
-  document.getElementById('user-name').textContent = user.name;
-  document.getElementById('user-role').textContent = user.title;
-
-  // Bandeau démo discret
-  const banner = document.createElement('div');
-  banner.id = 'demo-banner';
-  banner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#534AB7;color:#fff;text-align:center;font-size:11px;padding:5px;z-index:9999;font-family:sans-serif;letter-spacing:.02em';
-  banner.innerHTML = '◆ Mode démo &nbsp;·&nbsp; AuditFlow v1.0 &nbsp;·&nbsp; Connecté en tant que ' + user.name;
-  document.body.appendChild(banner);
-  document.getElementById('app').style.paddingTop = '27px';
-
-  // Déconnexion
-  document.getElementById('logout-btn').onclick = () => {
-    document.getElementById('app').classList.remove('is-admin');
-    document.getElementById('app').style.display = 'none';
-    document.getElementById('app').style.paddingTop = '0';
-    document.getElementById('login-screen').style.display = 'flex';
-    document.getElementById('login-email').value = '';
-    document.getElementById('login-password').value = '';
-    const b = document.getElementById('demo-banner');
-    if (b) b.remove();
-    STATE.user = null;
-  };
-
-  // Navigation sidebar
-  document.querySelectorAll('.nav[data-view]').forEach(nav => {
-    nav.addEventListener('click', () => navigate(nav.dataset.view));
+  var user = USERS.find(function(u){
+    return u.email.toLowerCase()===email &&
+           (u.pwd===pwd || pwd===AUDITFLOW_CONFIG.demoPassword) &&
+           u.status==='actif';
   });
+  if(!user){
+    errEl.textContent='Email ou mot de passe incorrect.';
+    errEl.style.display='block';
+    document.getElementById('li-pw').value='';
+    return;
+  }
 
-  navigate('dashboard');
+  errEl.style.display='none';
+  CU={id:user.id, name:user.name, email:user.email, role:user.role, initials:user.initials||'?', status:'actif'};
+  launchApp();
 }
 
-function navigate(view) {
-  currentView = view;
-  document.querySelectorAll('.nav[data-view]').forEach(n => n.classList.remove('active'));
-  const activeNav = document.getElementById(`nav-${view}`);
-  if (activeNav) activeNav.classList.add('active');
-  const container = document.getElementById('view-container');
-  container.innerHTML = '<div class="loading"><div class="spinner"></div>Chargement...</div>';
-  setTimeout(() => {
-    try {
-      const html = VIEWS[view] ? VIEWS[view]() : `<div class="content"><p>Vue introuvable.</p></div>`;
-      container.innerHTML = html;
-      if (VIEWS_INIT[view]) VIEWS_INIT[view]();
-    } catch(e) {
-      container.innerHTML = `<div class="content"><p style="color:#A32D2D">Erreur : ${e.message}</p></div>`;
-      console.error(e);
-    }
-  }, 50);
+function launchApp(){
+  document.getElementById('ls').style.display='none';
+  document.getElementById('app').style.display='flex';
+  if(CU.role==='admin')document.getElementById('app').classList.add('is-admin');
+  else document.getElementById('app').classList.remove('is-admin');
+  const tid=Object.keys(TM).find(k=>TM[k].name===CU.name)||'pm';
+  document.getElementById('uav').textContent=CU.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+  if(AVC[tid])document.getElementById('uav').style.cssText=AVC[tid]+';width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600';
+  document.getElementById('uname').textContent=CU.name;
+  document.getElementById('urole').textContent=CU.role==='admin'?'Admin / Directeur':'Auditrice';
+  document.getElementById('lbtn').onclick=function(){
+    document.getElementById('app').classList.remove('is-admin');
+    CU=null;
+    document.getElementById('li-em').value='';
+    document.getElementById('li-pw').value='';
+    document.getElementById('li-err').style.display='none';
+    initLogin();
+  };
+  document.querySelectorAll('.nav[data-view]').forEach(n=>n.addEventListener('click',()=>nav(n.dataset.view)));
+  nav('dashboard');
 }
 
-function openModal(title, bodyHTML, onConfirm) {
-  document.getElementById('modal-title').textContent = title;
-  document.getElementById('modal-body').innerHTML = bodyHTML;
-  document.getElementById('modal-overlay').style.display = 'flex';
-  document.getElementById('modal-confirm').onclick = () => { onConfirm(); closeModal(); };
-  document.getElementById('modal-cancel').onclick = closeModal;
-  document.getElementById('modal-close').onclick = closeModal;
+function nav(view){
+  CV=view;
+  document.querySelectorAll('.nav[data-view]').forEach(n=>n.classList.remove('active'));
+  const a=document.getElementById('nav-'+view);if(a)a.classList.add('active');
+  const c=document.getElementById('vc');
+  c.innerHTML='<div class="loading"><div class="sp"></div>Chargement...</div>';
+  setTimeout(()=>{try{c.innerHTML=V[view]?V[view]():'<div class="content">Vue introuvable.</div>';if(I[view])I[view]();}catch(e){c.innerHTML=`<div class="content" style="color:var(--red)">Erreur : ${e.message}</div>`;console.error(e);}},50);
 }
 
-function closeModal() { document.getElementById('modal-overlay').style.display = 'none'; }
-
-function toast(msg) {
-  const el = document.getElementById('toast');
-  el.textContent = msg; el.classList.add('show');
-  setTimeout(() => el.classList.remove('show'), 2500);
+function openModal(title,body,onOk){
+  document.getElementById('mtitle').textContent=title;
+  document.getElementById('mbody').innerHTML=body;
+  document.getElementById('modal').classList.add('show');
+  document.getElementById('mok').onclick=async function(){
+    await onOk();
+    closeModal();
+  };
 }
+function closeModal(){document.getElementById('modal').classList.remove('show');}
+function toast(msg){const e=document.getElementById('toast');e.textContent=msg;e.classList.add('show');setTimeout(()=>e.classList.remove('show'),2500);}
+function addHist(type,msg){HISTORY_LOG.unshift({type,msg,user:CU?.name||'—',date:new Date().toLocaleDateString('fr-FR',{day:'numeric',month:'short',year:'numeric'})});}
 
-function addHistory(type, msg) {
-  STATE.history.unshift({ type, msg, user: STATE.user?.name || 'Philippe M.', date: new Date().toLocaleDateString('fr-FR', { day:'numeric', month:'short', year:'numeric' }) });
-}
+function badge(s){return `<span class="badge ${BMAP[s]||'bpl'}">${s}</span>`}
+function pbar(s){return `<div class="pbar"><div class="pfill" style="width:${PRCT[s]||0}%"></div></div>`}
+function avEl(id,sz){const m=TM[id];if(!m)return'';return `<div class="avsm" style="${AVC[id]||''};width:${sz}px;height:${sz}px;font-size:${sz*.4}px">${m.short}</div>`}
 
-function getAuditTasks(audit) {
-  if (!STATE.tasks[audit.id]) STATE.tasks[audit.id] = defaultTasks(audit.id, audit.assignedTo || ['sh']);
-  return STATE.tasks[audit.id];
-}
-
-window.addEventListener('DOMContentLoaded', initApp);
+window.addEventListener('DOMContentLoaded',initLogin);

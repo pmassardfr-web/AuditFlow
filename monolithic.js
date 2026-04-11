@@ -1,7 +1,372 @@
+// ============================================================
+// AUDITFLOW CONFIG — remplir avec les valeurs Entra
+// ============================================================
+var AUDITFLOW_CONFIG = {
+  clientId:      "ba6dcaee-c8d6-4181-9c30-6ea770928455",   // Application (client) ID dans Entra
+  tenantId:      "9be1af73-7472-4112-9b68-dd37385cba7c",   // Directory (tenant) ID dans Entra
+  sharePointUrl: "https://axwaysoftware.sharepoint.com/sites/AuditInterne27",
+};
+
+// ============ CONSTANTS ============
+const MO=['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Août','Sep','Oct','Nov','Déc'];
+const STEPS=[
+  {s:'Scope & Preparation',ph:1},{s:'Work Program',ph:1},{s:'Audit Kick Off',ph:1},
+  {s:'Interviews / Process Review',ph:2},{s:'Flowcharts/Testing Strategy',ph:2},{s:'Testings',ph:2},
+  {s:'Report',ph:3},{s:'Report Restitution',ph:3},{s:'Management Responses',ph:3},
+  {s:'Exec. Committee Report',ph:3},{s:'Audit Committee Report',ph:3}
+];
+const PRCT={'Préparation':10,'Exécution':50,'Revue':80,'Clôturé':100,'Planifié':0,'Restitution':90};
+const BMAP={'Préparation':'bp2','Exécution':'be','Revue':'br2','Clôturé':'bdn','Planifié':'bpl','Restitution':'br2','En retard':'blt','En cours':'be','Non démarré':'bpl'};
+const GC=['#AFA9EC','#85B7EB','#5DCAA5','#EF9F27','#F0997B','#97C459','#AFA9EC','#85B7EB','#5DCAA5','#EF9F27'];
+const AVC={pm:'background:#CECBF6;color:#3C3489',sh:'background:#9FE1CB;color:#085041',ne:'background:#B5D4F4;color:#0C447C'};
+const TM={pm:{name:'Philippe M.',short:'PM',role:'admin',title:'Directeur Audit Interne'},sh:{name:'Selma H.',short:'SH',role:'auditeur',title:'Auditrice'},ne:{name:'Nisrine E.',short:'NE',role:'auditeur',title:'Auditrice'}};
+const RS={1:'<span style="color:var(--gn)">★</span>',2:'<span style="color:var(--am)">★★</span>',3:'<span style="color:var(--rd)">★★★</span>'};
+const ENT={sbs:'<span class="badge bsbs">SBS</span>',axw:'<span class="badge baxw">AXW</span>','74s':'<span class="badge bpc">74S</span>',both:'<span class="badge" style="background:var(--am-lt);color:#633806">SBS/AXW</span>',grp:'<span class="badge bgrp">Groupe</span>'};
+
+// ============ STATE ============
+let CU=null,CV='dashboard',CA=null,CS=0,CT='roles';
+
+// Membres de l'equipe — roles determines par le nom du compte Microsoft
+// Les utilisateurs sont authentifies via SSO Azure AD (MSAL)
+var USERS=[
+  {id:'pm',name:'Philippe M.',email:'philippe.massard@axway.com',role:'admin',status:'actif'},
+  {id:'sh',name:'Selma H.',email:'selma.habib@axway.com',role:'auditeur',status:'actif'},
+  {id:'ne',name:'Nisrine E.',email:'nisrine.el@axway.com',role:'auditeur',status:'actif'},
+];
+let PENDING=[];
+
+// PLAN AUDIT — source unique de vérité
+let AUDIT_PLAN=[
+  {id:'ap1',type:'Process',domaine:'Edition',process:'Product Development',processId:'p5',titre:'Product Development 2025',annee:2025,auditeurs:['sh'],statut:'En cours'},
+  {id:'ap2',type:'Process',domaine:'Deployment',process:'Product Deployment',processId:'p6',titre:'Product Deployment 2025',annee:2025,auditeurs:['ne'],statut:'En cours'},
+  {id:'ap3',type:'Process',domaine:'Support',process:'Budget / Forecast',processId:'p15',titre:'Budget / Forecast 2025',annee:2025,auditeurs:['sh'],statut:'Planifié'},
+  {id:'ap4',type:'BU',entite:'SBS',region:'AMEE',pays:['Maroc','Tunisie','Cameroun'],titre:'BU Maroc/Afrique 2025',annee:2025,auditeurs:['sh'],statut:'Clôturé'},
+  {id:'ap5',type:'BU',entite:'SBS',region:'AMEE',pays:['Liban'],titre:'BU Lebanon 2025',annee:2025,auditeurs:['ne'],statut:'En cours'},
+  {id:'ap6',type:'BU',entite:'SBS',region:'Europe',pays:['UK'],titre:'BU UK SBS 2025',annee:2025,auditeurs:['sh','ne'],statut:'Planifié'},
+  {id:'ap7',type:'Process',domaine:'Distribution',process:'Go-to-Market',processId:'p8',titre:'GTM Audit 2026',annee:2026,auditeurs:['sh'],statut:'En cours'},
+  {id:'ap8',type:'Process',domaine:'Support',process:'Cybersecurity & Data',processId:'p13',titre:'Cybersecurity Audit 2026',annee:2026,auditeurs:['ne'],statut:'Planifié'},
+  {id:'ap9',type:'BU',entite:'SBS',region:'AMEE',pays:['Liban'],titre:'BU Lebanon 2026',annee:2026,auditeurs:['sh'],statut:'Planifié'},
+  {id:'ap10',type:'BU',entite:'AXWAY',region:'Europe',pays:['Romania'],titre:'BU Romania 2026',annee:2026,auditeurs:['ne'],statut:'Clôturé'},
+  {id:'ap11',type:'Process',domaine:'Edition',process:'Product Development',processId:'p5',titre:'E2E Cross PL 2026',annee:2026,auditeurs:['sh','ne'],statut:'En cours'},
+];
+
+let PROCESSES=[
+  {id:'p1',dom:'Governance',proc:'Acquisitions',risk:3,archived:false,y26:{l:'SBS Integration',e:'sbs'},y27:{l:'Product Strat.',e:'both'}},
+  {id:'p2',dom:'Governance',proc:'Compliance',risk:1,archived:false,y28:{l:'Compliance / IP',e:'grp'}},
+  {id:'p3',dom:'Edition',proc:'Products & Portfolio',risk:2,archived:false,y27:{l:'Product Strat.',e:'both'}},
+  {id:'p5',dom:'Edition',proc:'Product Development',risk:2,archived:false,y26:{l:'E2E Cross PL',e:'74s'},y27:{l:'Product Devt',e:'74s'},y28:{l:'Research Tax Credit',e:'grp'}},
+  {id:'p6',dom:'Deployment',proc:'Product Deployment',risk:2,archived:false,y27:{l:'Product Deployment',e:'74s'}},
+  {id:'p7',dom:'Deployment',proc:'Product Quality & Support',risk:2,archived:false,y27:{l:'Support',e:'74s'}},
+  {id:'p8',dom:'Distribution',proc:'Go-to-Market',risk:1,archived:false,y26:{l:'GTM',e:'74s'},y28:{l:'GTM',e:'74s'}},
+  {id:'p9',dom:'Distribution',proc:'Sales & Services',risk:1,archived:false,y27:{l:'Sales',e:'both'}},
+  {id:'p10',dom:'Distribution',proc:'Customer Experience',risk:2,archived:false,y26:{l:'Customer Success',e:'74s'}},
+  {id:'p11',dom:'Support',proc:'OTC',risk:1,archived:false,y28:{l:'OTC',e:'grp'}},
+  {id:'p12',dom:'Support',proc:'Treasury & Tax',risk:1,archived:false,y26:{l:'Cash',e:'grp'},y28:{l:'Research Tax Credit',e:'grp'}},
+  {id:'p13',dom:'Support',proc:'Cybersecurity & Data',risk:3,archived:false,y27:{l:'Cybersecurity',e:'grp'}},
+  {id:'p15',dom:'Support',proc:'Budget / Forecast',risk:1,archived:false},
+];
+
+let ACTIONS=[
+  {id:'ac1',title:'Contrôles d\'accès SI',audit:'Cybersecurity',resp:'Nisrine E.',dept:'IT / Sécurité',ent:'Groupe',year:2025,quarter:'Q4',status:'En retard',pct:30,fromFinding:false},
+  {id:'ac2',title:'Séparation des tâches OTC',audit:'OTC',resp:'Selma H.',dept:'Finance',ent:'Groupe',year:2025,quarter:'Q4',status:'En retard',pct:10,fromFinding:false},
+  {id:'ac3',title:'Mise à jour procédure achats',audit:'P2P',resp:'Nisrine E.',dept:'Procurement',ent:'Groupe',year:2026,quarter:'Q1',status:'En cours',pct:60,fromFinding:false},
+];
+
+// Données par audit : contrôles, tâches, findings, mgmt responses
+let AUD_DATA={};
+
+function getAudData(id){if(!AUD_DATA[id])AUD_DATA[id]={tasks:{},controls:{},findings:[],mgtResp:[],docs:[],notes:''};return AUD_DATA[id];}
+
+// Audits dérivés du Plan Audit
+function getAudits(){
+  return AUDIT_PLAN.map(ap=>({
+    id:ap.id,
+    name:ap.titre,
+    type:ap.type,
+    ent:ap.type==='BU'?ap.entite:'74S',
+    start:0,dur:ap.annee===2025?6:3,
+    status:ap.statut||'Planifié',
+    step:ap.statut==='Clôturé'?10:ap.statut==='En cours'?2:0,
+    assignedTo:ap.auditeurs||[],
+    planRef:ap.id
+  }));
+}
+
+// ============ AUTH ============
+// ============================================================
+// AUTHENTIFICATION SSO MICROSOFT (MSAL)
+// ============================================================
+// ============================================================
+// AUTHENTIFICATION EMAIL / MOT DE PASSE
+// ============================================================
+// ============================================================
+// SUPABASE CONFIG
+// ============================================================
+var SUPABASE_URL = 'https://rdukdwwicctgywyaxlgw.supabase.co';
+var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJkdWtkd3dpY2N0Z3l3eWF4bGd3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4MjU4MjYsImV4cCI6MjA5MTQwMTgyNn0.TeGSNPW6231i1qs_ceP8o_1qaENIURDvJfdPWmZoHvI';
+var _sb = null; // instance Supabase
+
+function getSB(){
+  if(!_sb) _sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  return _sb;
+}
+
+// Cache local des données
+var DB = {
+  users: [],
+  auditPlan: [],
+  processes: [],
+  actions: [],
+  auditData: {},
+  history: [],
+};
+
+// ---- CRUD helpers ----
+async function sbGet(table, filter){
+  var q = getSB().from(table).select('*');
+  if(filter) q = q.match(filter);
+  var {data,error} = await q;
+  if(error){ console.error(table, error); return []; }
+  return data||[];
+}
+
+async function sbUpsert(table, row){
+  var {error} = await getSB().from(table).upsert(row, {onConflict:'id'});
+  if(error) console.error('upsert', table, error);
+}
+
+async function sbDelete(table, id){
+  var {error} = await getSB().from(table).delete().eq('id', id);
+  if(error) console.error('delete', table, error);
+}
+
+async function sbInsert(table, row){
+  var {error} = await getSB().from(table).insert(row);
+  if(error) console.error('insert', table, error);
+}
+
+// ---- Chargement initial ----
+async function loadAllData(){
+  DB.users     = await sbGet('af_users');
+  DB.auditPlan = (await sbGet('af_audit_plan')).map(function(r){
+    return {
+      id:r.id, type:r.type, titre:r.titre, annee:r.annee,
+      statut:r.statut||'Planifié',
+      auditeurs:r.auditeurs||[],
+      domaine:r.domaine, process:r.process, processId:r.process_id,
+      entite:r.entite, region:r.region, pays:r.pays||[],
+    };
+  });
+  DB.processes = (await sbGet('af_processes')).map(function(r){
+    return {id:r.id,dom:r.dom,proc:r.proc,risk:r.risk,archived:r.archived,
+      y25:r.y25,y26:r.y26,y27:r.y27,y28:r.y28};
+  });
+  DB.actions   = (await sbGet('af_actions')).map(function(r){
+    return {id:r.id,title:r.title,audit:r.audit,resp:r.resp,dept:r.dept,
+      ent:r.ent,year:r.year,quarter:r.quarter,status:r.status,pct:r.pct,
+      fromFinding:r.from_finding,findingTitle:r.finding_title};
+  });
+  DB.history   = (await sbGet('af_history')).map(function(r){
+    return {type:r.type,msg:r.msg,user:r.user_name,
+      date:new Date(r.created_at).toLocaleDateString('fr-FR',{day:'numeric',month:'short',year:'numeric'})};
+  });
+
+  // Sync vers STATE global
+  AUDIT_PLAN = DB.auditPlan;
+  PROCESSES  = DB.processes;
+  ACTIONS    = DB.actions;
+  HISTORY_LOG= DB.history;
+  USERS      = DB.users.map(function(u){
+    return {id:u.id,name:u.name,email:u.email,role:u.role,
+      initials:u.initials||u.name.split(' ').map(function(w){return w[0];}).join('').toUpperCase().slice(0,2),
+      status:u.status,pwd:u.pwd||''};
+  });
+}
+
+async function loadAuditData(auditId){
+  if(DB.auditData[auditId]) return DB.auditData[auditId];
+  var rows = await sbGet('af_audit_data', {audit_id: auditId});
+  if(rows.length){
+    DB.auditData[auditId] = {
+      tasks:    rows[0].tasks||{},
+      controls: rows[0].controls||{},
+      findings: rows[0].findings||[],
+      mgtResp:  rows[0].mgt_resp||[],
+      docs:     rows[0].docs||[],
+      notes:    rows[0].notes||'',
+      maturity: rows[0].maturity||null,
+    };
+  } else {
+    DB.auditData[auditId] = {tasks:{},controls:{},findings:[],mgtResp:[],docs:[],notes:'',maturity:null};
+  }
+  AUD_DATA[auditId] = DB.auditData[auditId];
+  return DB.auditData[auditId];
+}
+
+async function saveAuditData(auditId){
+  var d = AUD_DATA[auditId];
+  if(!d) return;
+  await sbUpsert('af_audit_data', {
+    audit_id: auditId,
+    tasks:    d.tasks,
+    controls: d.controls,
+    findings: d.findings,
+    mgt_resp: d.mgtResp,
+    docs:     d.docs,
+    notes:    d.notes,
+    maturity: d.maturity,
+    updated_at: new Date().toISOString(),
+  });
+}
+
+async function saveAuditPlan(ap){
+  await sbUpsert('af_audit_plan', {
+    id: ap.id, type: ap.type, titre: ap.titre, annee: ap.annee,
+    statut: ap.statut, auditeurs: ap.auditeurs,
+    domaine: ap.domaine, process: ap.process, process_id: ap.processId,
+    entite: ap.entite, region: ap.region, pays: ap.pays,
+    updated_at: new Date().toISOString(),
+  });
+}
+
+async function saveAction(ac){
+  await sbUpsert('af_actions', {
+    id: ac.id, title: ac.title, audit: ac.audit, resp: ac.resp,
+    dept: ac.dept, ent: ac.ent, year: ac.year, quarter: ac.quarter,
+    status: ac.status, pct: ac.pct,
+    from_finding: ac.fromFinding||false,
+    finding_title: ac.findingTitle||null,
+  });
+}
+
+async function addHistoryDB(type, msg, userName){
+  await sbInsert('af_history', {type, msg, user_name: userName, created_at: new Date().toISOString()});
+}
+
+async function saveUser(user){
+  await sbUpsert('af_users', {
+    id: user.id, email: user.email, name: user.name,
+    role: user.role, initials: user.initials, status: user.status,
+    pwd: user.pwd||'',
+  });
+}
+
+async function initLogin(){
+  document.getElementById('ls').style.display='flex';
+  document.getElementById('app').style.display='none';
+  document.getElementById('li-btn').onclick=doLogin;
+  document.getElementById('li-pw').onkeydown=function(e){if(e.key==='Enter')doLogin();};
+  document.getElementById('li-em').onkeydown=function(e){if(e.key==='Enter')document.getElementById('li-pw').focus();};
+  document.getElementById('li-pw').oninput=validatePwd;
+  document.getElementById('li-pw').onfocus=function(){document.getElementById('pw-rules').style.display='block';};
+
+  // Pré-charge les données Supabase
+  try {
+    await loadAllData();
+    console.log('Supabase connecté — données chargées');
+  } catch(e) {
+    console.warn('Supabase non disponible, mode local');
+  }
+}
+
+function togglePwd(){
+  var inp=document.getElementById('li-pw');
+  inp.type=inp.type==='password'?'text':'password';
+}
+
+function validatePwd(){
+  var v=document.getElementById('li-pw').value;
+  var rLen=v.length>=8;
+  var rMaj=/[A-Z]/.test(v);
+  var rSpec=/[^a-zA-Z0-9]/.test(v);
+  var set=function(id,ok){var el=document.getElementById(id);el.style.color=ok?'var(--gn)':'var(--t3)';el.textContent=(ok?'✓ ':'✗ ')+el.textContent.slice(2);};
+  set('r-len',rLen); set('r-maj',rMaj); set('r-spec',rSpec);
+}
+
+async function doLogin(){
+  var email=document.getElementById('li-em').value.trim().toLowerCase();
+  var pwd=document.getElementById('li-pw').value;
+  var errEl=document.getElementById('li-err');
+
+  if(pwd.length<8||!/[A-Z]/.test(pwd)||!/[^a-zA-Z0-9]/.test(pwd)){
+    errEl.textContent='Le mot de passe doit contenir 8 caractères min., 1 majuscule et 1 caractère spécial.';
+    errEl.style.display='block';
+    return;
+  }
+
+  // Cherche l'utilisateur dans Supabase
+  var user = USERS.find(function(u){return u.email.toLowerCase()===email&&u.pwd===pwd&&u.status==='actif';});
+  if(!user){
+    errEl.textContent='Email ou mot de passe incorrect.';
+    errEl.style.display='block';
+    document.getElementById('li-pw').value='';
+    return;
+  }
+
+  errEl.style.display='none';
+  CU={id:user.id, name:user.name, email:user.email, role:user.role,
+      initials:user.initials||'?', status:'actif'};
+  launchApp();
+}
+
+
+function launchApp(){
+  document.getElementById('ls').style.display='none';
+  document.getElementById('app').style.display='flex';
+  if(CU.role==='admin')document.getElementById('app').classList.add('is-admin');
+  else document.getElementById('app').classList.remove('is-admin');
+  const tid=Object.keys(TM).find(k=>TM[k].name===CU.name)||'pm';
+  document.getElementById('uav').textContent=CU.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+  if(AVC[tid])document.getElementById('uav').style.cssText=AVC[tid]+';width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600';
+  document.getElementById('uname').textContent=CU.name;
+  document.getElementById('urole').textContent=CU.role==='admin'?'Admin / Directeur':'Auditrice';
+  document.getElementById('lbtn').onclick=function(){
+    document.getElementById('app').classList.remove('is-admin');
+    CU=null;
+    document.getElementById('li-em').value='';
+    document.getElementById('li-pw').value='';
+    document.getElementById('li-err').style.display='none';
+    initLogin();
+  };
+  document.querySelectorAll('.nav[data-view]').forEach(n=>n.addEventListener('click',()=>nav(n.dataset.view)));
+  nav('dashboard');
+}
+
+// ============ NAV ============
+function nav(view){
+  CV=view;
+  document.querySelectorAll('.nav[data-view]').forEach(n=>n.classList.remove('active'));
+  const a=document.getElementById('nav-'+view);if(a)a.classList.add('active');
+  const c=document.getElementById('vc');
+  c.innerHTML='<div class="loading"><div class="sp"></div>Chargement...</div>';
+  setTimeout(()=>{try{c.innerHTML=V[view]?V[view]():'<div class="content">Vue introuvable.</div>';if(I[view])I[view]();}catch(e){c.innerHTML=`<div class="content" style="color:var(--rd)">Erreur : ${e.message}</div>`;console.error(e);}},50);
+}
+
+function openModal(title,body,onOk){
+  document.getElementById('mtitle').textContent=title;
+  document.getElementById('mbody').innerHTML=body;
+  document.getElementById('modal').classList.add('show');
+  document.getElementById('mok').onclick=async function(){
+    await onOk();
+    closeModal();
+  };
+}
+function closeModal(){document.getElementById('modal').classList.remove('show');}
+function toast(msg){const e=document.getElementById('toast');e.textContent=msg;e.classList.add('show');setTimeout(()=>e.classList.remove('show'),2500);}
+function addHist(type,msg){HISTORY_LOG.unshift({type,msg,user:CU?.name||'—',date:new Date().toLocaleDateString('fr-FR',{day:'numeric',month:'short',year:'numeric'})});}
+let HISTORY_LOG=[];
+
+function badge(s){return`<span class="badge ${BMAP[s]||'bpl'}">${s}</span>`}
+function pbar(s){return`<div class="pbar"><div class="pfill" style="width:${PRCT[s]||0}%"></div></div>`}
+function avEl(id,sz){const m=TM[id];if(!m)return'';return`<div class="avsm" style="${AVC[id]||''};width:${sz}px;height:${sz}px;font-size:${sz*.4}px">${m.short}</div>`}
+
+// ============ VIEWS ============
 const V={},I={};
 
+// ---- DASHBOARD ----
 V['dashboard']=()=>{
   var CY=2026;
+  var audits=getAudits();
   var yearAudits=AUDIT_PLAN.filter(function(a){return a.annee===CY;});
   var yClosed=yearAudits.filter(function(a){return a.statut==='Clôturé';});
   var yInProg=yearAudits.filter(function(a){return a.statut==='En cours';});
@@ -15,35 +380,35 @@ V['dashboard']=()=>{
     var pct=ap.statut==='Clôturé'?100:ap.statut==='En cours'?50:0;
     var tb=ap.type==='Process'?'bpc':'bbu';
     var stat=badge(ap.statut||'Planifié');
-    return `<tr style="cursor:pointer" onclick="openAudit(this.getAttribute('data-id'))" data-id="${ap.id}">
-      <td style="font-weight:500;font-size:11px">${ap.titre}</td>
-      <td><span class="badge ${tb}">${ap.type}</span></td>
-      <td style="font-size:10px;color:var(--text-2)">${detail}</td>
-      <td><div style="display:flex;gap:2px">${avs}</div></td>
-      <td>${stat}</td>
-      <td><div class="pbar" style="width:80px"><div class="pfill" style="width:${pct}%"></div></div>
-      <div style="font-size:10px;color:var(--text-3)">${pct}%</div></td>
-      </tr>`;
-  }).join(''):'<tr><td colspan="6" style="text-align:center;color:var(--text-3);padding:1rem">Aucun audit planifié en '+CY+'</td></tr>';
+    return '<tr style="cursor:pointer" onclick="openAudit(this.getAttribute(\'data-id\'))" data-id="'+ap.id+'">'
+      +'<td style="font-weight:500;font-size:11px">'+ap.titre+'</td>'
+      +'<td><span class="badge '+tb+'">'+ap.type+'</span></td>'
+      +'<td style="font-size:10px;color:var(--t2)">'+detail+'</td>'
+      +'<td><div style="display:flex;gap:2px">'+avs+'</div></td>'
+      +'<td>'+stat+'</td>'
+      +'<td><div class="pbar" style="width:80px"><div class="pfill" style="width:'+pct+'%"></div></div>'
+      +'<div style="font-size:10px;color:var(--t3)">'+pct+'%</div></td>'
+      +'</tr>';
+  }).join(''):'<tr><td colspan="6" style="text-align:center;color:var(--t3);padding:1rem">Aucun audit planifié en '+CY+'</td></tr>';
 
   var lateRows=late.map(function(a){
-    return `<div class="ar"><div style="flex:1"><div class="an">${a.title}</div>
-      <div class="am">${a.dept} · ${a.quarter} ${a.year}</div></div>
-      ${badge(a.status)}</div>`;
-  }).join('')||'<div style="font-size:12px;color:var(--text-3);padding:.5rem">Aucun plan urgent</div>';
+    return '<div class="ar"><div style="flex:1"><div class="an">'+a.title+'</div>'
+      +'<div class="am">'+a.dept+' · '+a.quarter+' '+a.year+'</div></div>'
+      +badge(a.status)+'</div>';
+  }).join('')||'<div style="font-size:12px;color:var(--t3);padding:.5rem">Aucun plan urgent</div>';
 
   var html="";
-  html+=`<div class="topbar"><div class="tbtitle">Tableau de bord — ${CY}</div>`;
+  html+='<div class="topbar"><div class="tbtitle">Tableau de bord — '+CY+'</div>';
   html+='<button class="bp" onclick="nav(\'plan-audit\')">+ Nouvel audit</button></div>';
   html+='<div class="content">';
   html+='<div class="metrics">';
-  html+=`<div class="mc"><div class="ml">Audits planifiés ${CY}</div><div class="mv">${yearAudits.length}</div><div class="ms">Plan annuel</div></div>`;
-  html+=`<div class="mc"><div class="ml">Clôturés</div><div class="mv" style="color:var(--green)">${yClosed.length}</div><div class="ms">${closedPct}% du plan</div></div>`;
-  html+=`<div class="mc"><div class="ml">En cours</div><div class="mv" style="color:var(--purple)">${yInProg.length}</div><div class="ms">Missions actives</div></div>`;
-  html+=`<div class="mc"><div class="ml">Planifiés (à démarrer)</div><div class="mv" style="color:var(--amber)">${yPlanned.length}</div><div class="ms">Non démarrés</div></div>`;
+  html+='<div class="mc"><div class="ml">Audits planifiés '+CY+'</div><div class="mv">'+yearAudits.length+'</div><div class="ms">Plan annuel</div></div>';
+  html+='<div class="mc"><div class="ml">Clôturés</div><div class="mv" style="color:var(--gn)">'+yClosed.length+'</div><div class="ms">'+closedPct+'% du plan</div></div>';
+  html+='<div class="mc"><div class="ml">En cours</div><div class="mv" style="color:var(--pu)">'+yInProg.length+'</div><div class="ms">Missions actives</div></div>';
+  html+='<div class="mc"><div class="ml">Planifiés (à démarrer)</div><div class="mv" style="color:var(--am)">'+yPlanned.length+'</div><div class="ms">Non démarrés</div></div>';
   html+='</div>';
   html+='<div style="margin-bottom:1.25rem">';
-  html+=`<div class="sth"><div class="st">Audits ${CY}</div><button class="bs" style="font-size:11px" onclick="nav('mes-audits')">Voir tout</button></div>`;
+  html+='<div class="sth"><div class="st">Audits '+CY+'</div><button class="bs" style="font-size:11px" onclick="nav(\'mes-audits\')">Voir tout</button></div>';
   html+='<div class="tw"><table>';
   html+='<thead><tr><th>Titre</th><th>Type</th><th>Détail</th><th>Auditeurs</th><th>Statut</th><th>Avancement</th></tr></thead>';
   html+='<tbody>'+auditRows+'</tbody></table></div></div>';
@@ -53,6 +418,8 @@ V['dashboard']=()=>{
   return html;
 };
 
+
+// ---- PLAN AUDIT (écran central) ----
 V['plan-audit']=()=>`
   <div class="topbar"><div class="tbtitle">Plan Audit</div><button class="bp ao" onclick="showAddAuditModal()">+ Ajouter un audit</button></div>
   <div class="content">
@@ -69,27 +436,27 @@ function renderPlanAuditTable(){
   var ft=document.getElementById('f-pa-type')?document.getElementById('f-pa-type').value:'all';
   var fy=document.getElementById('f-pa-year')?document.getElementById('f-pa-year').value:'all';
   var rows=AUDIT_PLAN.filter(function(a){return(ft==='all'||a.type===ft)&&(fy==='all'||String(a.annee)===fy);});
-  var h=`<thead><tr><th>Type</th><th>Titre</th><th>Detail</th><th>Annee</th><th>Auditeurs</th><th>Statut</th>${CU&&CU.role==='admin'?'<th>Actions</th>':''}</tr></thead><tbody>`;
+  var h='<thead><tr><th>Type</th><th>Titre</th><th>Detail</th><th>Annee</th><th>Auditeurs</th><th>Statut</th>'+(CU&&CU.role==='admin'?'<th>Actions</th>':'')+'</tr></thead><tbody>';
   if(!rows.length){
-    h+='<tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:1.5rem">Aucun audit planifie.</td></tr>';
+    h+='<tr><td colspan="7" style="text-align:center;color:var(--t3);padding:1.5rem">Aucun audit planifie.</td></tr>';
   } else {
     rows.forEach(function(ap){
       var idx=AUDIT_PLAN.indexOf(ap);
       var detail=ap.type==='Process'
-        ? `<span style="font-size:11px"><strong>${ap.domaine}</strong> &rsaquo; ${ap.process}</span>`
-        : `<span style="font-size:11px"><strong>${ap.entite}</strong> &middot; ${ap.region} &middot; ${(ap.pays||[]).join(', ')}</span>`;
+        ?'<span style="font-size:11px"><strong>'+ap.domaine+'</strong> &rsaquo; '+ap.process+'</span>'
+        :'<span style="font-size:11px"><strong>'+ap.entite+'</strong> &middot; '+ap.region+' &middot; '+(ap.pays||[]).join(', ')+'</span>';
       var avs=(ap.auditeurs||[]).map(function(id){return avEl(id,20);}).join('');
       var tb=ap.type==='Process'?'bpc':'bbu';
       var adminBtn=CU&&CU.role==='admin'
-        ? `<td style="white-space:nowrap"><button class="bs" style="font-size:10px;padding:2px 7px" onclick="showEditAuditModal(${idx})">Modifier</button> <button class="bd" style="font-size:10px;padding:2px 7px" onclick="deleteAudit(${idx})">Supprimer</button></td>`
-        : '';
+        ?'<td style="white-space:nowrap"><button class="bs" style="font-size:10px;padding:2px 7px" onclick="showEditAuditModal('+idx+')">Modifier</button> <button class="bd" style="font-size:10px;padding:2px 7px" onclick="deleteAudit('+idx+')">Supprimer</button></td>'
+        :'';
       h+='<tr>';
-      h+= `<td><span class="badge ${tb}">${ap.type}</span></td>`;
-      h+= `<td style="font-weight:500;font-size:12px">${ap.titre}</td>`;
-      h+= `<td>${detail}</td>`;
-      h+= `<td style="font-weight:500;color:var(--purple-dk)">${ap.annee}</td>`;
-      h+= `<td><div style="display:flex;gap:3px">${avs||'<span style="font-size:10px;color:var(--text-3)">-</span>'}</div></td>`;
-      h+= `<td>${badge(ap.statut||'Planifie')}</td>`;
+      h+='<td><span class="badge '+tb+'">'+ap.type+'</span></td>';
+      h+='<td style="font-weight:500;font-size:12px">'+ap.titre+'</td>';
+      h+='<td>'+detail+'</td>';
+      h+='<td style="font-weight:500;color:var(--pu-dk)">'+ap.annee+'</td>';
+      h+='<td><div style="display:flex;gap:3px">'+(avs||'<span style="font-size:10px;color:var(--t3)">-</span>')+'</div></td>';
+      h+='<td>'+badge(ap.statut||'Planifie')+'</td>';
       h+=adminBtn;
       h+='</tr>';
     });
@@ -113,11 +480,11 @@ function auditModalBody(ap){
   h+='<option value="Process"'+(type==='Process'?' selected':'')+'>Process Audit</option>';
   h+='<option value="BU"'+(type==='BU'?' selected':'')+'>BU Audit</option>';
   h+='</select></div>';
-  h+= `<div id="m-proc-fields" style="${type==='BU'?'display:none':''}">`;
+  h+='<div id="m-proc-fields" style="'+(type==='BU'?'display:none':'')+'\">';
   h+='<div><label>Domaine</label><select id="m-dom" onchange="updateProcessList()">'+domOpts+'</select></div>';
   h+='<div><label>Processus</label><select id="m-proc">'+procOpts+'</select></div>';
   h+='</div>';
-  h+= `<div id="m-bu-fields" style="${type!=='BU'?'display:none':''}">`;
+  h+='<div id="m-bu-fields" style="'+(type!=='BU'?'display:none':'')+'\">';
   h+='<div><label>Entite</label><select id="m-ent">';
   h+='<option'+(ap&&ap.entite==='SBS'?' selected':'')+'>SBS</option>';
   h+='<option'+(ap&&ap.entite==='AXW'?' selected':'')+'>AXW</option>';
@@ -141,7 +508,7 @@ function auditModalBody(ap){
   h+='</select></div>';
   h+='<div><label>Statut</label><select id="m-statut">';
   ['Planifié','En cours','Clôturé'].forEach(function(s){
-    var match=ap&&(ap.statut===s);
+    var match=ap&&(ap.statut===s||(s==='Planifie'&&ap.statut==='Planifié')||(s==='Cloture'&&ap.statut==='Clôturé'));
     h+='<option'+(match?' selected':'')+'>'+s+'</option>';
   });
   h+='</select></div></div>';
@@ -218,6 +585,7 @@ async function deleteAudit(idx){
   renderPlanAuditTable();toast('Supprimé');
 }
 
+// ---- PLAN PROCESS (lecture depuis AUDIT_PLAN) ----
 V['plan-process']=()=>`
   <div class="topbar"><div class="tbtitle">Plan Process 2025–2028</div>
     <div style="display:flex;gap:7px">
@@ -226,7 +594,7 @@ V['plan-process']=()=>`
     </div>
   </div>
   <div class="content">
-    <div style="background:var(--purple-lt);border:.5px solid var(--purple);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--purple-dk);margin-bottom:1rem">
+    <div style="background:var(--pu-lt);border:.5px solid var(--pu);border-radius:var(--r);padding:8px 12px;font-size:12px;color:var(--pu-dk);margin-bottom:1rem">
       Les missions planifiées sont gérées depuis l'écran <strong>Plan Audit</strong>. Cet écran affiche la vue consolidée.
     </div>
     <div class="tw"><table id="pp-tbl"></table></div>
@@ -237,30 +605,31 @@ I['plan-process']=()=>renderProcTable();
 function renderProcTable(){
   const doms=[...new Set(PROCESSES.map(p=>p.dom))];
   const procAudits=AUDIT_PLAN.filter(a=>a.type==='Process');
-  var h=`<thead><tr><th>Domaine</th><th>Processus</th><th>Risque</th><th>2025</th><th>2026</th><th>2027</th><th>2028</th>${CU&&CU.role==='admin'?'<th>Actions</th>':''}</tr></thead><tbody>`;
+  var h='<thead><tr><th>Domaine</th><th>Processus</th><th>Risque</th><th>2025</th><th>2026</th><th>2027</th><th>2028</th>'+(CU&&CU.role==='admin'?'<th>Actions</th>':'')+'</tr></thead><tbody>';
   doms.forEach(dom=>{
     const rows=PROCESSES.filter(p=>p.dom===dom&&!p.archived);
     if(!rows.length)return;
     h+=`<tr class="sr"><td colspan="8">${dom}</td></tr>`;
     rows.forEach(p=>{
       const idx=PROCESSES.indexOf(p);
+      // cherche missions dans AUDIT_PLAN par année
       const mByYear={};
       [2025,2026,2027,2028].forEach(y=>{
         const m=procAudits.find(a=>a.processId===p.id&&a.annee===y);
         mByYear[y]=m;
       });
-      const yc=y=>{const m=mByYear[y];return m?`<div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:10px;font-weight:500;color:var(--purple-dk)">${m.titre}</span><div style="display:flex;gap:3px">${(m.auditeurs||[]).map(id=>avEl(id,16)).join('')}</div></div>`:'<span style="color:var(--text-3)">—</span>';};
+      const yc=y=>{const m=mByYear[y];return m?`<div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:10px;font-weight:500;color:var(--pu-dk)">${m.titre}</span><div style="display:flex;gap:3px">${(m.auditeurs||[]).map(id=>avEl(id,16)).join('')}</div></div>`:'<span style="color:var(--t3)">—</span>';};
       var riskCell = CU&&CU.role==='admin'
-        ? `<select style="font-size:10px;padding:2px 4px;border:none;background:transparent;cursor:pointer" onchange="editRisk(${idx},this.value)"><option value="1" ${p.risk===1?'selected':''}>&#9733;</option><option value="2" ${p.risk===2?'selected':''}>&#9733;&#9733;</option><option value="3" ${p.risk===3?'selected':''}>&#9733;&#9733;&#9733;</option></select>`
+        ? '<select style="font-size:10px;padding:2px 4px;border:none;background:transparent;cursor:pointer" onchange="editRisk('+idx+',this.value)"><option value="1" '+(p.risk===1?'selected':'')+'>&#9733;</option><option value="2" '+(p.risk===2?'selected':'')+'>&#9733;&#9733;</option><option value="3" '+(p.risk===3?'selected':'')+'>&#9733;&#9733;&#9733;</option></select>'
         : RS[p.risk];
       var adminCell = CU&&CU.role==='admin'
-        ? `<td style="white-space:nowrap"><button class="bs" style="font-size:10px;padding:2px 7px" onclick="showEditProcModal(${idx})">Modifier</button> <button class="bd" style="font-size:10px;padding:2px 7px" onclick="archiveProc(${idx})">Archiver</button></td>`
+        ? '<td style="white-space:nowrap"><button class="bs" style="font-size:10px;padding:2px 7px" onclick="showEditProcModal('+idx+')">Modifier</button> <button class="bd" style="font-size:10px;padding:2px 7px" onclick="archiveProc('+idx+')">Archiver</button></td>'
         : '';
       h+='<tr>';
-      h+=`<td style="font-size:11px;color:var(--text-2)">${dom}</td>`;
-      h+=`<td style="font-weight:500;font-size:11px">${p.proc}</td>`;
-      h+=`<td style="text-align:center">${riskCell}</td>`;
-      h+=`<td>${yc(2025)}</td><td>${yc(2026)}</td><td>${yc(2027)}</td><td>${yc(2028)}</td>`;
+      h+='<td style="font-size:11px;color:var(--t2)">'+dom+'</td>';
+      h+='<td style="font-weight:500;font-size:11px">'+p.proc+'</td>';
+      h+='<td style="text-align:center">'+riskCell+'</td>';
+      h+='<td>'+yc(2025)+'</td><td>'+yc(2026)+'</td><td>'+yc(2027)+'</td><td>'+yc(2028)+'</td>';
       h+=adminCell;
       h+='</tr>';
     });
@@ -274,7 +643,7 @@ function archiveProc(idx){PROCESSES[idx].archived=true;addHist('arch',`Process "
 function showAddProcModal(){
   const doms=[...new Set(PROCESSES.map(p=>p.dom))];
   openModal('Nouveau processus',`
-    <div><label>Domaine</label><select id="m-dom">${doms.map(function(d){return'<option>'+d+'</option>';}).join('')}<option>+ Nouveau domaine</option></select></div>
+    <div><label>Domaine</label><select id="m-dom">'+doms.map(function(d){return'<option>'+d+'</option>';}).join('')+'<option>+ Nouveau domaine</option></select></div>
     <div><label>Nom du processus</label><input id="m-proc" placeholder="ex : Gestion de la paie"/></div>
     <div><label>Niveau de risque</label><select id="m-risk"><option value="1">★ Faible</option><option value="2" selected>★★ Moyen</option><option value="3">★★★ Élevé</option></select></div>`,
     ()=>{
@@ -299,12 +668,13 @@ function showEditProcModal(idx){
     });
 }
 
+// ---- PLAN BU (lecture depuis AUDIT_PLAN) ----
 V['plan-bu']=()=>`
   <div class="topbar"><div class="tbtitle">Plan BU 2025–2028</div>
     <button class="bp ao" onclick="nav('plan-audit')">Gérer le plan audit →</button>
   </div>
   <div class="content">
-    <div style="background:var(--purple-lt);border:.5px solid var(--purple);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--purple-dk);margin-bottom:1rem">
+    <div style="background:var(--pu-lt);border:.5px solid var(--pu);border-radius:var(--r);padding:8px 12px;font-size:12px;color:var(--pu-dk);margin-bottom:1rem">
       Les BU Audits sont gérés depuis l'écran <strong>Plan Audit</strong>. Cet écran affiche la vue consolidée par entité.
     </div>
     <div style="display:flex;gap:8px;margin-bottom:1rem">
@@ -322,7 +692,7 @@ function renderBUTable(){
   const rows=AUDIT_PLAN.filter(a=>a.type==='BU'&&(fe==='all'||a.entite===fe)&&(fy==='all'||String(a.annee)===fy));
   const regs=[...new Set(rows.map(b=>b.region))];
   var h='<thead><tr><th>Entite</th><th>Region</th><th>Pays</th><th>Titre mission</th><th>Annee</th><th>Auditeurs</th><th>Statut</th></tr></thead><tbody>';
-  if(!rows.length){h+=`<tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:1.5rem">Aucune BU planifiée.</td></tr>`;
+  if(!rows.length){h+=`<tr><td colspan="7" style="text-align:center;color:var(--t3);padding:1.5rem">Aucune BU planifiée.</td></tr>`;
   } else {
     regs.forEach(reg=>{
       h+=`<tr class="sr"><td colspan="7">${reg}</td></tr>`;
@@ -330,11 +700,11 @@ function renderBUTable(){
         const avs=(b.auditeurs||[]).map(id=>avEl(id,20)).join('');
         h+=`<tr>
           <td><span class="badge ${b.entite==='SBS'?'bsbs':'baxw'}">${b.entite}</span></td>
-          <td style="color:var(--text-2);font-size:11px">${b.region}</td>
+          <td style="color:var(--t2);font-size:11px">${b.region}</td>
           <td style="font-weight:500;font-size:11px">${(b.pays||[]).join(', ')}</td>
           <td style="font-size:11px">${b.titre}</td>
-          <td style="font-weight:500;color:var(--purple-dk)">${b.annee}</td>
-          <td><div style="display:flex;gap:3px">${avs||'<span style="font-size:10px;color:var(--text-3)">—</span>'}</div></td>
+          <td style="font-weight:500;color:var(--pu-dk)">${b.annee}</td>
+          <td><div style="display:flex;gap:3px">${avs||'<span style="font-size:10px;color:var(--t3)">—</span>'}</div></td>
           <td>${badge(b.statut||'Planifié')}</td>
         </tr>`;
       });
@@ -343,6 +713,7 @@ function renderBUTable(){
   document.getElementById('bu-tbl').innerHTML=h+'</tbody>';
 }
 
+// ---- MES AUDITS ----
 V['mes-audits']=()=>`
   <div class="topbar"><div class="tbtitle">Mes audits</div><button class="bp ao" onclick="nav('plan-audit')">+ Nouvel audit</button></div>
   <div class="content">
@@ -366,7 +737,7 @@ function renderAuditList(){
         ${badge(a.status)}
         <div>${pbar(a.status)}</div>
       </div>`).join('')
-    :'<div style="font-size:12px;color:var(--text-3);padding:.5rem">Aucun audit.</div>';
+    :'<div style="font-size:12px;color:var(--t3);padding:.5rem">Aucun audit.</div>';
 }
 
 async function openAudit(id){
@@ -376,37 +747,6 @@ async function openAudit(id){
   CT='roles';
   await loadAuditData(id);
   nav('audit-detail');
-};
-
-V['audit-detail']=()=>{
-  const a=getAudits().find(x=>x.id===CA);
-  if(!a) return '<div class="content">Audit introuvable.</div>';
-  return `
-    <div class="topbar">
-      <div style="display:flex;align-items:center;gap:8px">
-        <button class="bs" onclick="nav('mes-audits')">← Retour</button>
-        <div class="tbtitle">${a.name}</div>
-      </div>
-      <div style="display:flex;gap:7px">
-        <button class="bp" onclick="validerEtape()">Valider l'étape →</button>
-      </div>
-    </div>
-    <div class="content">
-      <div class="card" style="margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between">
-        <div>
-          <div style="font-size:14px;font-weight:600">${a.name}</div>
-          <div style="font-size:11px;color:var(--text-2);margin-top:2px">${a.ent} · ${a.type} Audit</div>
-        </div>
-      </div>
-      <div class="card" style="display:flex;align-items:center;gap:12px;margin-bottom:1rem">
-        <span style="font-size:11px;color:var(--text-2);white-space:nowrap" id="gp-lbl">Étape ${CS+1}/11</span>
-        <div class="pbar" style="flex:1"><div class="pfill" id="gp-fill" style="width:${Math.round(CS/10*100)}%"></div></div>
-        <span style="font-size:11px;color:var(--text-2)" id="gp-pct">${Math.round(CS/10*100)}%</span>
-      </div>
-      <div class="card" style="margin-bottom:1rem" id="stepper-card">${renderStepper()}</div>
-      <div class="tabs" id="det-tabs">${renderDetTabs()}</div>
-      <div id="det-content">${renderDetContent()}</div>
-    </div>`;
 };
 I['audit-detail']=()=>{};
 
@@ -454,8 +794,8 @@ function renderDetContent(){
       <div style="font-size:13px;font-weight:600">Étape ${CS+1} — ${s.s}</div>${badge(a.status)}</div>
       <div class="g2" style="margin-bottom:.875rem">
         ${(a.assignedTo||[]).map(id=>{const m=TM[id];if(!m)return'';const my=stepTasks.filter(t=>t.assignee===id);
-          return`<div class="card" style="background:var(--bg)"><div style="font-size:10px;color:var(--text-3);margin-bottom:5px">Auditrice</div><div style="display:flex;align-items:center;gap:7px">${avEl(id,26)}<div><div style="font-size:12px;font-weight:500">${m.name}</div><div style="font-size:10px;color:${my.filter(t=>t.done).length===my.length&&my.length>0?'var(--green)':'var(--amber)'}">${my.length?my.filter(t=>t.done).length+'/'+my.length+' tâches':'Aucune tâche'}</div></div></div></div>`;}).join('')}
-        <div class="card" style="background:var(--bg)"><div style="font-size:10px;color:var(--text-3);margin-bottom:5px">Valideur</div><div style="display:flex;align-items:center;gap:7px">${avEl('pm',26)}<div><div style="font-size:12px;font-weight:500">Philippe M.</div><div style="font-size:10px;color:var(--amber)">Validation requise</div></div></div></div>
+          return`<div class="card" style="background:var(--bg)"><div style="font-size:10px;color:var(--t3);margin-bottom:5px">Auditrice</div><div style="display:flex;align-items:center;gap:7px">${avEl(id,26)}<div><div style="font-size:12px;font-weight:500">${m.name}</div><div style="font-size:10px;color:${my.filter(t=>t.done).length===my.length&&my.length>0?'var(--gn)':'var(--am)'}">${my.length?my.filter(t=>t.done).length+'/'+my.length+' tâches':'Aucune tâche'}</div></div></div></div>`;}).join('')}
+        <div class="card" style="background:var(--bg)"><div style="font-size:10px;color:var(--t3);margin-bottom:5px">Valideur</div><div style="display:flex;align-items:center;gap:7px">${avEl('pm',26)}<div><div style="font-size:12px;font-weight:500">Philippe M.</div><div style="font-size:10px;color:var(--am)">Validation requise</div></div></div></div>
       </div>
       ${CU?.role!=='admin'?'<div class="notice">La validation est réservée au Directeur Audit.</div>':''}
     </div>`;
@@ -465,7 +805,7 @@ function renderDetContent(){
     const done=stepTasks.filter(t=>t.done).length;
     return`<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.875rem">
       <div style="font-size:13px;font-weight:600">Tâches — ${s.s}</div>
-      <div style="display:flex;gap:8px;align-items:center"><span style="font-size:11px;color:var(--text-2)">${done}/${stepTasks.length}</span><button class="bs" style="font-size:11px" onclick="showNewTaskModal()">+ Ajouter</button></div>
+      <div style="display:flex;gap:8px;align-items:center"><span style="font-size:11px;color:var(--t2)">${done}/${stepTasks.length}</span><button class="bs" style="font-size:11px" onclick="showNewTaskModal()">+ Ajouter</button></div>
     </div><div id="task-list">${renderTaskList(stepTasks,a)}</div></div>`;
   }
 
@@ -485,7 +825,7 @@ function renderDetContent(){
     const targets=step5c.filter(c=>c.design==='target');
     return`<div class="card">
       <div style="font-size:13px;font-weight:600;margin-bottom:.875rem">Tests — Contrôles clefs existants</div>
-      ${keyExist.length?buildExecTable(keyExist):'<div style="font-size:12px;color:var(--text-3);padding:.5rem">Aucun controle clef existant (definis a l\'etape 5).</div>'}
+      ${keyExist.length?buildExecTable(keyExist):'<div style="font-size:12px;color:var(--t3);padding:.5rem">Aucun controle clef existant (definis a l\'etape 5).</div>'}
       <div style="font-size:13px;font-weight:600;margin:.875rem 0 .5rem">Contrôles Target — anomalies automatiques</div>
       ${buildTargetList(targets)}
     </div>`;
@@ -501,10 +841,10 @@ function renderDetContent(){
       <div style="font-size:13px;font-weight:600">Findings</div>
       <button class="bs" style="font-size:11px" onclick="showAddFindingModal()">+ Ajouter un finding</button>
     </div>
-    ${failF.length?('<div style="font-size:11px;font-weight:500;color:var(--text-2);margin-bottom:.5rem">Controles - Fail</div>'+failF.map(function(ctrl){return'<div class="fr"><div class="fh"><span class="badge bfl">Fail</span><div class="ft">'+ctrl.name+'</div></div><div style="font-size:11px;color:var(--text-2)">'+ctrl.finding+'</div></div>';}).join('')):''}
-    ${targetF.length?('<div style="font-size:11px;font-weight:500;color:var(--text-2);margin:.75rem 0 .5rem">Controles non existants (Target)</div>'+targetF.map(function(ctrl){return'<div class="fr"><div class="fh"><span class="badge btg">Target</span><div class="ft">'+ctrl.name+'</div></div><div style="font-size:11px;color:var(--red)">Controle non existant.</div></div>';}).join('')):''}
-    ${manualF.length?('<div style="font-size:11px;font-weight:500;color:var(--text-2);margin:.75rem 0 .5rem">Findings additionnels</div>'+manualF.map(function(f,idx2){return'<div class="fr"><div class="fh"><span class="badge bpc">Finding</span><div class="ft">'+f.title+'</div><button class="bd" style="font-size:10px;padding:2px 6px" onclick="removeManualFinding('+idx2+')">X</button></div><div style="font-size:11px;color:var(--text-2)">'+f.desc+'</div></div>';}).join('')):''}
-    ${!failF.length&&!targetF.length&&!manualF.length?'<div style="font-size:12px;color:var(--text-3)">Aucun finding pour le moment.</div>':''}
+    ${failF.length?('<div style="font-size:11px;font-weight:500;color:var(--t2);margin-bottom:.5rem">Controles - Fail</div>'+failF.map(function(ctrl){return'<div class="fr"><div class="fh"><span class="badge bfl">Fail</span><div class="ft">'+ctrl.name+'</div></div><div style="font-size:11px;color:var(--t2)">'+ctrl.finding+'</div></div>';}).join('')):''}
+    ${targetF.length?('<div style="font-size:11px;font-weight:500;color:var(--t2);margin:.75rem 0 .5rem">Controles non existants (Target)</div>'+targetF.map(function(ctrl){return'<div class="fr"><div class="fh"><span class="badge btg">Target</span><div class="ft">'+ctrl.name+'</div></div><div style="font-size:11px;color:var(--rd)">Controle non existant.</div></div>';}).join('')):''}
+    ${manualF.length?('<div style="font-size:11px;font-weight:500;color:var(--t2);margin:.75rem 0 .5rem">Findings additionnels</div>'+manualF.map(function(f,idx2){return'<div class="fr"><div class="fh"><span class="badge bpc">Finding</span><div class="ft">'+f.title+'</div><button class="bd" style="font-size:10px;padding:2px 6px" onclick="removeManualFinding('+idx2+')">X</button></div><div style="font-size:11px;color:var(--t2)">'+f.desc+'</div></div>';}).join('')):''}
+    ${!failF.length&&!targetF.length&&!manualF.length?'<div style="font-size:12px;color:var(--t3)">Aucun finding pour le moment.</div>':''}
     </div>`;
   }
 
@@ -538,30 +878,30 @@ function renderDetContent(){
     if(d.maturity.saved)html+='<span class="tag-new">&#10003; Evaluation sauvegardee</span>';
     html+='</div>';
     html+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:1rem">';
-    html+='<div class="card" style="background:var(--bg);text-align:center"><div style="font-size:10px;color:var(--text-3);margin-bottom:3px">Tests finalises</div><div style="font-size:20px;font-weight:600">'+step6c.length+'</div></div>';
-    html+='<div class="card" style="background:var(--green-lt);text-align:center"><div style="font-size:10px;color:var(--text-3);margin-bottom:3px">Pass</div><div style="font-size:20px;font-weight:600;color:var(--green)">'+passCount+'</div></div>';
-    html+='<div class="card" style="background:var(--red-lt);text-align:center"><div style="font-size:10px;color:var(--text-3);margin-bottom:3px">Fail + Target</div><div style="font-size:20px;font-weight:600;color:var(--red)">'+(failCount+targetCount)+'</div></div>';
+    html+='<div class="card" style="background:var(--bg);text-align:center"><div style="font-size:10px;color:var(--t3);margin-bottom:3px">Tests finalises</div><div style="font-size:20px;font-weight:600">'+step6c.length+'</div></div>';
+    html+='<div class="card" style="background:var(--gn-lt);text-align:center"><div style="font-size:10px;color:var(--t3);margin-bottom:3px">Pass</div><div style="font-size:20px;font-weight:600;color:var(--gn)">'+passCount+'</div></div>';
+    html+='<div class="card" style="background:var(--rd-lt);text-align:center"><div style="font-size:10px;color:var(--t3);margin-bottom:3px">Fail + Target</div><div style="font-size:20px;font-weight:600;color:var(--rd)">'+(failCount+targetCount)+'</div></div>';
     html+='</div>';
-    if(sugLabel)html+='<div style="background:var(--purple-lt);border:.5px solid var(--purple);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--purple-dk);margin-bottom:1rem">Niveau suggere : <strong>'+sugLabel.label+'</strong></div>';
-    html+='<div style="font-size:12px;font-weight:500;color:var(--text-2);margin-bottom:.625rem">Selectionnez le niveau de maturite du processus audite :</div>';
+    if(sugLabel)html+='<div style="background:var(--pu-lt);border:.5px solid var(--pu);border-radius:var(--r);padding:8px 12px;font-size:12px;color:var(--pu-dk);margin-bottom:1rem">Niveau suggere : <strong>'+sugLabel.label+'</strong></div>';
+    html+='<div style="font-size:12px;font-weight:500;color:var(--t2);margin-bottom:.625rem">Selectionnez le niveau de maturite du processus audite :</div>';
     html+='<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:1rem">';
     MLEVELS.forEach(function(l){
       const sel=d.maturity.level===l.key;
-      const border='border:2px solid '+(sel?l.color:'var(--border)')+';';
-      const bg='background:'+(sel?l.bg:'var(--bg-card)')+';';
+      const border='border:2px solid '+(sel?l.color:'var(--br)')+';';
+      const bg='background:'+(sel?l.bg:'var(--bw)')+';';
       const radioBg='background:'+(sel?l.color:'transparent')+';';
-      html+='<div onclick="setMaturity(\''+l.key+'\')" style="'+border+'border-radius:var(--radius);padding:.875rem 1rem;cursor:pointer;'+bg+'transition:all .15s">';
+      html+='<div onclick="setMaturity(\''+l.key+'\')" style="'+border+'border-radius:var(--r);padding:.875rem 1rem;cursor:pointer;'+bg+'transition:all .15s">';
       html+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">';
       html+='<div style="width:14px;height:14px;border-radius:50%;border:2px solid '+l.color+';'+radioBg+'flex-shrink:0"></div>';
       html+='<div style="font-size:13px;font-weight:600;color:'+l.color+'">'+l.label+'</div>';
       html+='</div>';
       html+='<div style="padding-left:24px">';
-      html+='<div style="font-size:11px;color:var(--text-2);margin-bottom:4px"><strong>Definition :</strong> '+l.def+'</div>';
-      html+='<div style="font-size:11px;color:var(--text-3)"><strong>Mesure :</strong> '+l.meas+'</div>';
+      html+='<div style="font-size:11px;color:var(--t2);margin-bottom:4px"><strong>Definition :</strong> '+l.def+'</div>';
+      html+='<div style="font-size:11px;color:var(--t3)"><strong>Mesure :</strong> '+l.meas+'</div>';
       html+='</div></div>';
     });
     html+='</div>';
-    html+='<div style="font-size:12px;font-weight:500;color:var(--text-2);margin-bottom:.375rem">Commentaires / Justification</div>';
+    html+='<div style="font-size:12px;font-weight:500;color:var(--t2);margin-bottom:.375rem">Commentaires / Justification</div>';
     html+='<textarea id="maturity-notes" style="width:100%;min-height:80px;resize:vertical;font-size:12px" placeholder="Justifiez votre evaluation...">'+(d.maturity.notes||'')+'</textarea>';
     html+='<div style="display:flex;justify-content:flex-end;margin-top:8px"><button class="bp" onclick="saveMaturity()">Sauvegarder</button></div>';
     html+='</div>';
@@ -569,6 +909,7 @@ function renderDetContent(){
   }
 
   if(CT==='mgt-resp'){
+    // Collecte tous les findings de cet audit
     const step5c=d.controls[4]||[];
     const step6c=(d.controls[4]||[]).filter(x=>x.clef&&x.design==='existing'&&x.finalized&&x.result==='fail');
     const allFindings=[
@@ -577,6 +918,7 @@ function renderDetContent(){
       ...(d.findings||[]).map((f,i)=>({id:'m_'+i,title:f.title,desc:f.desc,type:'manual'})),
     ];
     if(!d.mgtResp)d.mgtResp=[];
+    // Ensure each finding has a mgt response entry
     allFindings.forEach(f=>{
       if(!d.mgtResp.find(r=>r.findingId===f.id)){
         d.mgtResp.push({findingId:f.id,action:'',owner:'',year:2026,quarter:'Q1',pushed:false});
@@ -588,15 +930,15 @@ function renderDetContent(){
     </div>
     ${allFindings.length?allFindings.map((f,fi)=>{
       const resp=d.mgtResp.find(r=>r.findingId===f.id)||{};
-      const tcolor={fail:'var(--red)',target:'var(--amber)',manual:'var(--purple-dk)'}[f.type];
+      const tcolor={fail:'var(--rd)',target:'var(--am)',manual:'var(--pu-dk)'}[f.type];
       const tbadge={fail:'bfl',target:'btg',manual:'bpc'}[f.type];
       return`<div class="mr-row">
         <div class="mr-hdr"><span class="badge ${tbadge}">${f.type==='fail'?'Fail':f.type==='target'?'Target':'Finding'}</span><div class="mr-title">${f.title}</div>${resp.pushed?'<span class="tag-new">✓ Envoyé</span>':''}</div>
-        <div style="font-size:11px;color:var(--text-2);margin-bottom:.625rem">${f.desc}</div>
+        <div style="font-size:11px;color:var(--t2);margin-bottom:.625rem">${f.desc}</div>
         <div class="mr-fields">
-          <div><label style="font-size:10px;color:var(--text-3);display:block;margin-bottom:3px">Action</label><input style="font-size:11px" placeholder="Action corrective à mener..." value="${resp.action||''}" onchange="setMgtResp('${f.id}','action',this.value)"/></div>
-          <div><label style="font-size:10px;color:var(--text-3);display:block;margin-bottom:3px">Owner (département)</label><input style="font-size:11px" placeholder="ex : Finance, IT..." value="${resp.owner||''}" onchange="setMgtResp('${f.id}','owner',this.value)"/></div>
-          <div><label style="font-size:10px;color:var(--text-3);display:block;margin-bottom:3px">Deadline</label>
+          <div><label style="font-size:10px;color:var(--t3);display:block;margin-bottom:3px">Action</label><input style="font-size:11px" placeholder="Action corrective à mener..." value="${resp.action||''}" onchange="setMgtResp('${f.id}','action',this.value)"/></div>
+          <div><label style="font-size:10px;color:var(--t3);display:block;margin-bottom:3px">Owner (département)</label><input style="font-size:11px" placeholder="ex : Finance, IT..." value="${resp.owner||''}" onchange="setMgtResp('${f.id}','owner',this.value)"/></div>
+          <div><label style="font-size:10px;color:var(--t3);display:block;margin-bottom:3px">Deadline</label>
             <div style="display:flex;gap:4px">
               <select style="font-size:11px" onchange="setMgtResp('${f.id}','year',parseInt(this.value))"><option ${resp.year===2025?'selected':''}>2025</option><option ${resp.year===2026?'selected':''} selected>2026</option><option ${resp.year===2027?'selected':''}>2027</option><option ${resp.year===2028?'selected':''}>2028</option></select>
               <select style="font-size:11px" onchange="setMgtResp('${f.id}','quarter',this.value)"><option ${resp.quarter==='Q1'?'selected':''}>Q1</option><option ${resp.quarter==='Q2'?'selected':''}>Q2</option><option ${resp.quarter==='Q3'?'selected':''}>Q3</option><option ${resp.quarter==='Q4'?'selected':''}>Q4</option></select>
@@ -604,14 +946,14 @@ function renderDetContent(){
           </div>
         </div>
       </div>`;
-    }).join(''):'<div style="font-size:12px;color:var(--text-3)">Aucun finding identifié (complétez les étapes 5, 6 et 7).</div>'}
+    }).join(''):'<div style="font-size:12px;color:var(--t3)">Aucun finding identifié (complétez les étapes 5, 6 et 7).</div>'}
     </div>`;
   }
 
   if(CT==='docs'){
     return`<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.875rem"><div style="font-size:13px;font-weight:600">Documents</div><button class="bs" style="font-size:11px" onclick="addFakeDoc()">+ Ajouter</button></div>
-    <div class="uz" onclick="addFakeDoc()"><div style="font-size:12px;color:var(--text-2)">Glissez vos fichiers ou cliquez</div><div style="font-size:10px;color:var(--text-3);margin-top:2px">PDF, Excel, Word, PowerPoint</div></div>
-    <div id="doc-list">${buildDocList(d.docs)}</div>
+    <div class="uz" onclick="addFakeDoc()"><div style="font-size:12px;color:var(--t2)">Glissez vos fichiers ou cliquez</div><div style="font-size:10px;color:var(--t3);margin-top:2px">PDF, Excel, Word, PowerPoint</div></div>
+    <div id="doc-list">'+buildDocList(d.docs)+'</div>
     </div>`;
   }
 
@@ -642,15 +984,15 @@ async function validerEtape(){
 }
 
 function renderTaskList(st,a){
-  if(!st.length)return'<div style="font-size:12px;color:var(--text-3);padding:.5rem">Aucune tâche.</div>';
+  if(!st.length)return'<div style="font-size:12px;color:var(--t3);padding:.5rem">Aucune tâche.</div>';
   return st.map((t,i)=>`<div class="ti">
     <div class="tcb ${t.done?'done':''}" onclick="toggleTask(${i})">${t.done?'✓':''}</div>
     <div class="tt ${t.done?'dt':''}">${t.desc}</div>
     <select style="font-size:11px;padding:2px 6px;border-radius:20px;background:var(--bg)" onchange="reassignTask(${i},this.value)">
       <option value="none" ${!t.assignee||t.assignee==='none'?'selected':''}>—</option>
-      ${buildAssigneeOpts(a.assignedTo,t.assignee)}
+      '+buildAssigneeOpts(a.assignedTo,t.assignee)+'
     </select>
-    <span style="font-size:10px;color:${t.done?'var(--green)':t.assignee&&t.assignee!=='none'?'var(--purple)':'var(--text-3)'}">${t.done?'✓':t.assignee&&t.assignee!=='none'?'En cours':'À faire'}</span>
+    <span style="font-size:10px;color:${t.done?'var(--gn)':t.assignee&&t.assignee!=='none'?'var(--pu)':'var(--t3)'}">${t.done?'✓':t.assignee&&t.assignee!=='none'?'En cours':'À faire'}</span>
   </div>`).join('');
 }
 
@@ -661,7 +1003,7 @@ function showNewTaskModal(){
   const a=getAudits().find(x=>x.id===CA);
   openModal('Nouvelle tâche',`
     <div><label>Description</label><input id="t-desc" placeholder="ex : Analyser les données..."/></div>
-    <div><label>Assignée à</label><select id="t-assign"><option value="none">— Non assignée</option>${buildAssigneeOpts(a.assignedTo,null)}</select></div>`,
+    <div><label>Assignée à</label><select id="t-assign"><option value="none">— Non assignée</option>'+buildAssigneeOpts(a.assignedTo,null)+'</select></div>`,
     ()=>{
       const desc=document.getElementById('t-desc').value.trim();
       if(!desc){toast('Description obligatoire');return;}
@@ -676,7 +1018,7 @@ function showNewTaskModal(){
 }
 
 function showAddControlModal(){
-  openModal('Ajouter un contrôle', `
+  openModal('Ajouter un contrôle',`
     <div><label>Nom du contrôle</label><input id="c-name" placeholder="ex : Rapprochement mensuel des soldes"/></div>
     <div><label>Contrôle owner (département)</label><input id="c-owner" placeholder="ex : Finance / Comptabilité"/></div>
     <div class="g2">
@@ -746,6 +1088,7 @@ function pushAllMgtResp(){
 }
 
 async function addFakeDoc(){
+  // Crée un input file et déclenche le sélecteur
   var inp = document.createElement('input');
   inp.type = 'file';
   inp.accept = '.pdf,.xlsx,.xls,.docx,.doc,.pptx,.ppt,.csv,.txt';
@@ -817,7 +1160,7 @@ async function saveMaturity(){
   if(!d.maturity?.level){toast('Veuillez sélectionner un niveau de maturité');return;}
   d.maturity.notes=document.getElementById('maturity-notes')?.value||'';
   d.maturity.saved=true;
-  addHist('edit', `Maturité process définie : ${d.maturity.level} — "${AUDIT_PLAN.find(a=>a.id===CA)?.titre}"`);
+  addHist('edit',`Maturité process définie : ${d.maturity.level} — "${AUDIT_PLAN.find(a=>a.id===CA)?.titre}"`);
   await saveAuditData(CA); toast('Évaluation sauvegardée ✓');
   document.getElementById('det-content').innerHTML=renderDetContent();
 }
@@ -828,11 +1171,12 @@ async function deleteAction(id){
   if(!confirm('Supprimer "'+ACTIONS[idx].title+'" ?'))return;
   await sbDelete('af_actions', id);
   ACTIONS.splice(idx,1);
-  addHist('del', "Plan d'action supprimé");
+  addHist('del','Plan d'action supprimé');
   renderActionList();
-  toast("Plan d'action supprimé");
+  toast('Plan d'action supprimé');
 }
 
+// ---- PLANIFICATION ----
 V['planification']=()=>`
   <div class="topbar"><div class="tbtitle">Planification</div></div>
   <div class="content">
@@ -849,17 +1193,18 @@ function renderGantt(){
   const fy=document.getElementById('f-pyr')?.value||'all';
   const rows=AUDIT_PLAN.filter(a=>(ft==='all'||a.type===ft)&&(fy==='all'||String(a.annee)===fy));
   const months=MO.map(function(m,mi){return'<div class="gc'+(mi===8?' today-col':'')+'">'+m+'</div>';}).join('');
-  const hdr=`<div class="gr gw" style="border-bottom:.5px solid var(--border)"><div class="gc" style="text-align:left;padding-left:8px">Audit</div>${months}</div>`;
+  const hdr=`<div class="gr gw" style="border-bottom:.5px solid var(--br)"><div class="gc" style="text-align:left;padding-left:8px">Audit</div>${months}</div>`;
   const body=rows.map((a,idx)=>{
     const start=a.annee===2025?Math.floor(Math.random()*4):0;
     const dur=4;
     const cells=MO.map(function(_,m){var cls=m===8?'gm td':'gm';var bar=m>=start&&m<start+dur?'<div class="gb" style="background:'+GC[idx%GC.length]+'"></div>':'';return'<div class="'+cls+'">'+bar+'</div>';}).join('');
-    return`<div class="gr" style="border-bottom:.5px solid var(--border)">
+    return`<div class="gr" style="border-bottom:.5px solid var(--br)">
       <div class="gn2"><span class="badge ${a.type==='Process'?'bpc':'bbu'}" style="font-size:9px;padding:1px 5px">${a.type==='Process'?'P':'BU'}</span>${a.titre.length>16?a.titre.slice(0,15)+'…':a.titre}</div>${cells}</div>`;
   }).join('');
   document.getElementById('gantt-wrap').innerHTML=hdr+body;
 }
 
+// ---- MODÈLES ----
 V['modeles']=()=>`
   <div class="topbar"><div class="tbtitle">Modèles d'audit</div><button class="bp">+ Nouveau modèle</button></div>
   <div class="content">
@@ -869,14 +1214,15 @@ V['modeles']=()=>`
   </div>`;
 function sTT(el,id){document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');document.getElementById('tp-p').style.display=id==='tp-p'?'grid':'none';document.getElementById('tp-b').style.display=id==='tp-b'?'grid':'none';}
 
+// ---- PLANS D'ACTION ----
 V['plans-action']=()=>`
   <div class="topbar"><div class="tbtitle">Suivi des plans d'action</div><button class="bp" onclick="showNewActionModal()">+ Ajouter</button></div>
   <div class="content">
     <div class="metrics">
       <div class="mc"><div class="ml">Total</div><div class="mv">${ACTIONS.length}</div></div>
-      <div class="mc"><div class="ml">En cours</div><div class="mv" style="color:var(--purple)">${ACTIONS.filter(a=>a.status==='En cours').length}</div></div>
-      <div class="mc"><div class="ml">En retard</div><div class="mv" style="color:var(--red)">${ACTIONS.filter(a=>a.status==='En retard').length}</div></div>
-      <div class="mc"><div class="ml">Issus de findings</div><div class="mv" style="color:var(--green)">${ACTIONS.filter(a=>a.fromFinding).length}</div></div>
+      <div class="mc"><div class="ml">En cours</div><div class="mv" style="color:var(--pu)">${ACTIONS.filter(a=>a.status==='En cours').length}</div></div>
+      <div class="mc"><div class="ml">En retard</div><div class="mv" style="color:var(--rd)">${ACTIONS.filter(a=>a.status==='En retard').length}</div></div>
+      <div class="mc"><div class="ml">Issus de findings</div><div class="mv" style="color:var(--gn)">${ACTIONS.filter(a=>a.fromFinding).length}</div></div>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:1rem">
       <select id="f-pa-st" onchange="renderActionList()"><option value="all">Tous statuts</option><option>En cours</option><option>En retard</option><option>Non démarré</option><option>Clôturé</option></select>
@@ -888,7 +1234,7 @@ I['plans-action']=()=>renderActionList();
 function renderActionList(){
   const fs=document.getElementById('f-pa-st')?.value||'all';
   const rows=ACTIONS.filter(a=>fs==='all'||a.status===fs);
-  const fc={'En retard':'var(--red)','Clôturé':'var(--green)','Non démarré':'var(--gray)','En cours':'var(--purple)'};
+  const fc={'En retard':'var(--rd)','Clôturé':'var(--gn)','Non démarré':'var(--gy)','En cours':'var(--pu)'};
   document.getElementById('action-list').innerHTML=rows.map(a=>`
     <div class="card" style="margin-bottom:6px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
@@ -896,15 +1242,15 @@ function renderActionList(){
         ${badge(a.status)}
         ${a.fromFinding?'<span class="tag-new">↗ Finding</span>':''}
       </div>
-      <div style="font-size:11px;color:var(--text-2);margin-bottom:4px">
+      <div style="font-size:11px;color:var(--t2);margin-bottom:4px">
         Audit : ${a.audit} · Resp. : ${a.resp} · Dept owner : <strong>${a.dept}</strong> · Éch. : ${a.quarter} ${a.year}
-        ${a.findingTitle?'<span style="color:var(--text-3)"> · Finding : "'+a.findingTitle+'"</span>':''}
+        ${a.findingTitle?'<span style="color:var(--t3)"> · Finding : "'+a.findingTitle+'"</span>':''}
       </div>
       <div style="display:flex;align-items:center;gap:8px">
-        <div style="flex:1;height:5px;background:var(--bg);border-radius:3px;overflow:hidden"><div style="height:100%;border-radius:3px;background:${fc[a.status]||'var(--purple)'};width:${a.pct}%"></div></div>
-        <span style="font-size:10px;color:var(--text-3)">${a.pct}%</span>
+        <div style="flex:1;height:5px;background:var(--bg);border-radius:3px;overflow:hidden"><div style="height:100%;border-radius:3px;background:${fc[a.status]||'var(--pu)'};width:${a.pct}%"></div></div>
+        <span style="font-size:10px;color:var(--t3)">${a.pct}%</span>
       </div>
-    </div>`).join('')||'<div style="font-size:12px;color:var(--text-3)">Aucun plan d\'action.</div>';
+    </div>`).join('')||'<div style="font-size:12px;color:var(--t3)">Aucun plan d\'action.</div>';
 }
 
 async function showNewActionModal(){
@@ -918,29 +1264,31 @@ async function showNewActionModal(){
       <div><label>Année</label><select id="pa-yr"><option>2025</option><option>2026</option><option>2027</option><option>2028</option></select></div>
       <div><label>Trimestre</label><select id="pa-q"><option>Q1</option><option>Q2</option><option>Q3</option><option>Q4</option></select></div>
     </div>`,
-    async ()=>{
+    ()=>{
       const title=document.getElementById('pa-title').value.trim();
       if(!title){toast('Titre obligatoire');return;}
-      var newAc={id:'ac'+Date.now(),title,audit:document.getElementById('pa-audit').value,resp:document.getElementById('pa-resp').value,dept:document.getElementById('pa-dept').value||'—',ent:document.getElementById('pa-ent').value,year:parseInt(document.getElementById('pa-yr').value),quarter:document.getElementById('pa-q').value,status:'Non démarré',pct:0,fromFinding:false};
-      ACTIONS.unshift(newAc); await saveAction(newAc); renderActionList();toast("Plan d'action créé ✓");
+      var newAc={id:'ac'+Date.now(),title,audit:document.getElementById('pa-audit').value,resp:document.getElementById('pa-resp').value,dept:document.getElementById('pa-dept').value||'—',ent:document.getElementById('pa-ent').value,year:parseInt(document.getElementById('pa-yr').value),quarter:document.getElementById('pa-q').value,status:'Non démarré',pct:0,fromFinding:false});
+      ACTIONS.unshift(newAc); await saveAction(newAc); renderActionList();toast('Plan d\'action créé ✓');
     });
 }
 
+// ---- HISTORIQUE ----
 V['historique']=()=>`<div class="topbar"><div class="tbtitle">Historique des modifications</div></div>
   <div class="content"><div class="card" id="hl"></div></div>`;
 I['historique']=()=>{
-  const dc={add:'var(--green)',edit:'var(--purple)',arch:'var(--amber)',del:'var(--red)'};
+  const dc={add:'var(--gn)',edit:'var(--pu)',arch:'var(--am)',del:'var(--rd)'};
   document.getElementById('hl').innerHTML=HISTORY_LOG.length
-    ?HISTORY_LOG.map(h=>`<div style="display:flex;gap:10px;padding:.625rem 0;border-bottom:.5px solid var(--border)"><div style="width:8px;height:8px;border-radius:50%;background:${dc[h.type]||'var(--purple)'};margin-top:4px;flex-shrink:0"></div><div><div style="font-size:12px">${h.msg}</div><div style="font-size:10px;color:var(--text-3);margin-top:2px">${h.user} · ${h.date}</div></div></div>`).join('')
-    :'<div style="font-size:12px;color:var(--text-3)">Aucune modification.</div>';
+    ?HISTORY_LOG.map(h=>`<div style="display:flex;gap:10px;padding:.625rem 0;border-bottom:.5px solid var(--br)"><div style="width:8px;height:8px;border-radius:50%;background:${dc[h.type]||'var(--pu)'};margin-top:4px;flex-shrink:0"></div><div><div style="font-size:12px">${h.msg}</div><div style="font-size:10px;color:var(--t3);margin-top:2px">${h.user} · ${h.date}</div></div></div>`).join('')
+    :'<div style="font-size:12px;color:var(--t3)">Aucune modification.</div>';
 };
 
+// ---- RÔLES & ACCÈS ----
 V['roles']=()=>`
   <div class="topbar"><div class="tbtitle">Rôles & Accès</div><button class="bp" onclick="showInviteModal()">+ Inviter</button></div>
   <div class="content">
-    ${PENDING.length?('<div style="margin-bottom:1rem"><div class="st" style="margin-bottom:.5rem">Demandes en attente ('+PENDING.length+')</div>'+PENDING.map(function(u,pi){return'<div class="card" style="margin-bottom:6px;display:flex;align-items:center;gap:10px"><div style="flex:1"><div style="font-size:12px;font-weight:500">'+u.name+'</div><div style="font-size:11px;color:var(--text-2)">'+u.email+'</div></div><button class="bp" style="font-size:11px" onclick="approveUser('+pi+')">Valider</button><button class="bd" style="font-size:11px" onclick="rejectUser('+pi+')">Refuser</button></div>';}).join('')+'</div>'):''}
+    ${PENDING.length?('<div style="margin-bottom:1rem"><div class="st" style="margin-bottom:.5rem">Demandes en attente ('+PENDING.length+')</div>'+PENDING.map(function(u,pi){return'<div class="card" style="margin-bottom:6px;display:flex;align-items:center;gap:10px"><div style="flex:1"><div style="font-size:12px;font-weight:500">'+u.name+'</div><div style="font-size:11px;color:var(--t2)">'+u.email+'</div></div><button class="bp" style="font-size:11px" onclick="approveUser('+pi+')">Valider</button><button class="bd" style="font-size:11px" onclick="rejectUser('+pi+')">Refuser</button></div>';}).join('')+'</div>'):''}
     <div class="tw"><table><thead><tr><th>Membre</th><th>Email</th><th>Rôle</th><th>Statut</th><th>Modifier</th></tr></thead><tbody id="utbl"></tbody></table></div>
-    <div class="card" style="margin-top:1rem;font-size:12px;color:var(--text-2);line-height:1.8">
+    <div class="card" style="margin-top:1rem;font-size:12px;color:var(--t2);line-height:1.8">
       <strong>Admin / Directeur</strong> — accès complet, validation des étapes, gestion du Plan Audit et des utilisateurs.<br>
       <strong>Auditrice</strong> — accès à ses audits assignés, remplissage des tâches, contrôles, findings et documents.
     </div>
@@ -951,10 +1299,10 @@ function renderUsersTbl(){
   const RL={admin:'Admin / Directeur',auditeur:'Auditrice',audite:'Audité'};
   const RB={admin:'bpc',auditeur:'bdn',audite:'btg'};
   document.getElementById('utbl').innerHTML=USERS.map((u,i)=>`
-    <tr><td style="font-weight:500">${u.name}</td><td style="color:var(--text-2);font-size:11px">${u.email}</td>
+    <tr><td style="font-weight:500">${u.name}</td><td style="color:var(--t2);font-size:11px">${u.email}</td>
     <td><span class="badge ${RB[u.role]||'bpl'}">${RL[u.role]||u.role}</span></td>
-    <td><span style="font-size:11px;color:var(--green)">● ${u.status}</span></td>
-    <td><select style="font-size:11px;padding:3px 7px;border:.5px solid var(--border-md);border-radius:var(--radius);background:var(--bg-card)" onchange="changeRole(${i},this.value)">
+    <td><span style="font-size:11px;color:var(--gn)">● ${u.status}</span></td>
+    <td><select style="font-size:11px;padding:3px 7px;border:.5px solid var(--bm);border-radius:var(--r);background:var(--bw)" onchange="changeRole(${i},this.value)">
       <option value="admin" ${u.role==='admin'?'selected':''}>Admin / Directeur</option>
       <option value="auditeur" ${u.role==='auditeur'?'selected':''}>Auditrice</option>
       <option value="audite" ${u.role==='audite'?'selected':''}>Audité</option>
@@ -962,8 +1310,8 @@ function renderUsersTbl(){
 }
 
 function changeRole(i,r){USERS[i].role=r;renderUsersTbl();toast('Rôle mis à jour');}
-function approveUser(i){const u=PENDING[i];u.status='actif';USERS.push(u);PENDING.splice(i,1);addHist('add', `Accès validé pour ${u.name}`);nav('roles');toast(`Accès accordé à ${u.name} ✓`);}
-function rejectUser(i){const u=PENDING[i];PENDING.splice(i,1);addHist('del', `Demande refusée pour ${u.name}`);nav('roles');toast('Refusé');}
+function approveUser(i){const u=PENDING[i];u.status='actif';USERS.push(u);PENDING.splice(i,1);addHist('add',`Accès validé pour ${u.name}`);nav('roles');toast(`Accès accordé à ${u.name} ✓`);}
+function rejectUser(i){const u=PENDING[i];PENDING.splice(i,1);addHist('del',`Demande refusée pour ${u.name}`);nav('roles');toast('Refusé');}
 
 function showInviteModal(){
   openModal('Inviter un membre',`
@@ -977,15 +1325,16 @@ function showInviteModal(){
       const pwd=document.getElementById('iv-pw').value;
       if(!name||!email||!pwd){toast('Champs obligatoires');return;}
       USERS.push({id:'u'+Date.now(),name,email,pwd,role:document.getElementById('iv-rl').value,status:'actif'});
-      addHist('add', `${name} invité(e)`);renderUsersTbl();toast(`${name} ajouté(e) ✓`);
+      addHist('add',`${name} invité(e)`);renderUsersTbl();toast(`${name} ajouté(e) ✓`);
     });
 }
 
+
 function buildControlList(ctrls){
-  if(!ctrls||!ctrls.length)return'<div style="font-size:12px;color:var(--text-3);padding:.5rem">Aucun controle identifie.</div>';
+  if(!ctrls||!ctrls.length)return'<div style="font-size:12px;color:var(--t3);padding:.5rem">Aucun controle identifie.</div>';
   var h='<div class="ch"><span>Controle</span><span>Owner</span><span>Frequence</span><span>Clef ?</span><span>Design</span><span></span></div>';
   ctrls.forEach(function(ctrl,ci){
-    h+='<div class="cr"><span style="font-weight:500">'+ctrl.name+'</span><span style="color:var(--text-2)">'+ctrl.owner+'</span><span style="color:var(--text-2)">'+ctrl.freq+'</span>';
+    h+='<div class="cr"><span style="font-weight:500">'+ctrl.name+'</span><span style="color:var(--t2)">'+ctrl.owner+'</span><span style="color:var(--t2)">'+ctrl.freq+'</span>';
     h+='<span><span class="badge '+(ctrl.clef?'bps':'bpl')+'">'+(ctrl.clef?'Oui':'Non')+'</span></span>';
     h+='<span><span class="badge '+(ctrl.design==='existing'?'bdn':'btg')+'">'+(ctrl.design==='existing'?'Existing':'Target')+'</span></span>';
     h+='<button class="bd" style="font-size:10px;padding:2px 6px" onclick="removeControl('+ci+')">X</button></div>';
@@ -994,19 +1343,18 @@ function buildControlList(ctrls){
 }
 
 function buildTargetList(targets){
-  if(!targets||!targets.length)return'<div style="font-size:12px;color:var(--text-3);padding:.5rem">Aucun controle target.</div>';
+  if(!targets||!targets.length)return'<div style="font-size:12px;color:var(--t3);padding:.5rem">Aucun controle target.</div>';
   return targets.map(function(ctrl){
     return '<div class="fr"><div class="fh"><span class="badge btg">Target</span><div class="ft">'+ctrl.name+'</div></div>'
-      +'<div style="font-size:11px;color:var(--red)">Controle non existant a definir par '+ctrl.owner+'.</div></div>';
+      +'<div style="font-size:11px;color:var(--rd)">Controle non existant a definir par '+ctrl.owner+'.</div></div>';
   }).join('');
 }
 
 function buildDocList(docs){
   if(!docs||!docs.length)return'';
   return docs.map(function(f){
-    return `<div style="display:flex;align-items:center;gap:7px;font-size:11px;color:var(--text-2);background:var(--bg);padding:5px 9px;border-radius:var(--radius);margin-bottom:5px">
-      <span style="color:var(--purple)">&#9646;</span>${f.name}<span style="margin-left:auto;color:var(--text-3)">${f.size}</span>
-      <button class="bd" style="font-size:10px;padding:2px 6px;margin-left:8px" onclick="deleteDoc(CA, '${f.path}', '${f.name}')">X</button></div>`;
+    return '<div style="display:flex;align-items:center;gap:7px;font-size:11px;color:var(--t2);background:var(--bg);padding:5px 9px;border-radius:var(--r);margin-bottom:5px">'
+      +'<span style="color:var(--pu)">&#9646;</span>'+f.name+'<span style="margin-left:auto;color:var(--t3)">'+f.size+'</span><button class="bd" style="font-size:10px;padding:2px 6px;margin-left:8px" onclick="deleteDoc(CA, '+f.path+', '+f.name+')">X</button></div>';
   }).join('');
 }
 
@@ -1021,7 +1369,21 @@ function buildTplCards(names,badgeCls){
     return '<div class="card" style="display:flex;flex-direction:column;gap:6px">'
       +'<div style="display:flex;justify-content:space-between"><div style="font-size:12px;font-weight:500">'+n+'</div>'
       +'<span class="badge '+badgeCls+'">'+(badgeCls==='bpc'?'Process':'BU')+'</span></div>'
-      +'<div style="font-size:11px;color:var(--text-2)">3 phases · 11 etapes</div>'
+      +'<div style="font-size:11px;color:var(--t2)">3 phases · 11 etapes</div>'
       +'<button class="bs" style="width:100%">Utiliser</button></div>';
   }).join('');
 }
+
+
+async function deleteDoc(auditId, path, name){
+  if(!confirm('Supprimer "' + name + '" ?')) return;
+  var {error} = await getSB().storage.from('auditflow-docs').remove([path]);
+  if(error){ toast('Erreur suppression : ' + error.message); return; }
+  var d = getAudData(auditId);
+  d.docs = d.docs.filter(function(f){ return f.path !== path; });
+  await saveAuditData(auditId);
+  document.getElementById('det-content').innerHTML = renderDetContent();
+  toast(name + ' supprimé ✓');
+}
+
+window.addEventListener('DOMContentLoaded',initLogin);

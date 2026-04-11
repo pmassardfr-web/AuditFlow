@@ -1,0 +1,152 @@
+var DB = {
+  users: [],
+  auditPlan: [],
+  processes: [],
+  actions: [],
+  auditData: {},
+  history: [],
+};
+
+async function sbGet(table, filter){
+  var q = getSB().from(table).select('*');
+  if(filter) q = q.match(filter);
+  var {data,error} = await q;
+  if(error){ console.error(table, error); return []; }
+  return data||[];
+}
+
+async function sbUpsert(table, row){
+  var {error} = await getSB().from(table).upsert(row, {onConflict:'id'});
+  if(error) console.error('upsert', table, error);
+}
+
+async function sbDelete(table, id){
+  var {error} = await getSB().from(table).delete().eq('id', id);
+  if(error) console.error('delete', table, error);
+}
+
+async function sbInsert(table, row){
+  var {error} = await getSB().from(table).insert(row);
+  if(error) console.error('insert', table, error);
+}
+
+async function loadAllData(){
+  DB.users     = await sbGet('af_users');
+  DB.auditPlan = (await sbGet('af_audit_plan')).map(function(r){
+    return {
+      id:r.id, type:r.type, titre:r.titre, annee:r.annee,
+      statut:r.statut||'Planifié',
+      auditeurs:r.auditeurs||[],
+      domaine:r.domaine, process:r.process, processId:r.process_id,
+      entite:r.entite, region:r.region, pays:r.pays||[],
+    };
+  });
+  DB.processes = (await sbGet('af_processes')).map(function(r){
+    return {id:r.id,dom:r.dom,proc:r.proc,risk:r.risk,archived:r.archived,
+      y25:r.y25,y26:r.y26,y27:r.y27,y28:r.y28};
+  });
+  DB.actions   = (await sbGet('af_actions')).map(function(r){
+    return {id:r.id,title:r.title,audit:r.audit,resp:r.resp,dept:r.dept,
+      ent:r.ent,year:r.year,quarter:r.quarter,status:r.status,pct:r.pct,
+      fromFinding:r.from_finding,findingTitle:r.finding_title};
+  });
+  DB.history   = (await sbGet('af_history')).map(function(r){
+    return {type:r.type,msg:r.msg,user:r.user_name,
+      date:new Date(r.created_at).toLocaleDateString('fr-FR',{day:'numeric',month:'short',year:'numeric'})};
+  });
+
+  AUDIT_PLAN = DB.auditPlan;
+  PROCESSES  = DB.processes;
+  ACTIONS    = DB.actions;
+  HISTORY_LOG= DB.history;
+  USERS      = DB.users.map(function(u){
+    return {id:u.id,name:u.name,email:u.email,role:u.role,
+      initials:u.initials||u.name.split(' ').map(function(w){return w[0];}).join('').toUpperCase().slice(0,2),
+      status:u.status,pwd:u.pwd||''};
+  });
+}
+
+async function loadAuditData(auditId){
+  if(DB.auditData[auditId]) return DB.auditData[auditId];
+  var rows = await sbGet('af_audit_data', {audit_id: auditId});
+  if(rows.length){
+    DB.auditData[auditId] = {
+      tasks:    rows[0].tasks||{},
+      controls: rows[0].controls||{},
+      findings: rows[0].findings||[],
+      mgtResp:  rows[0].mgt_resp||[],
+      docs:     rows[0].docs||[],
+      notes:    rows[0].notes||'',
+      maturity: rows[0].maturity||null,
+    };
+  } else {
+    DB.auditData[auditId] = {tasks:{},controls:{},findings:[],mgtResp:[],docs:[],notes:'',maturity:null};
+  }
+  AUD_DATA[auditId] = DB.auditData[auditId];
+  return DB.auditData[auditId];
+}
+
+async function saveAuditData(auditId){
+  var d = AUD_DATA[auditId];
+  if(!d) return;
+  await sbUpsert('af_audit_data', {
+    audit_id: auditId,
+    tasks:    d.tasks,
+    controls: d.controls,
+    findings: d.findings,
+    mgt_resp: d.mgtResp,
+    docs:     d.docs,
+    notes:    d.notes,
+    maturity: d.maturity,
+    updated_at: new Date().toISOString(),
+  });
+}
+
+async function saveAuditPlan(ap){
+  await sbUpsert('af_audit_plan', {
+    id: ap.id, type: ap.type, titre: ap.titre, annee: ap.annee,
+    statut: ap.statut, auditeurs: ap.auditeurs,
+    domaine: ap.domaine, process: ap.process, process_id: ap.processId,
+    entite: ap.entite, region: ap.region, pays: ap.pays,
+    updated_at: new Date().toISOString(),
+  });
+}
+
+async function saveAction(ac){
+  await sbUpsert('af_actions', {
+    id: ac.id, title: ac.title, audit: ac.audit, resp: ac.resp,
+    dept: ac.dept, ent: ac.ent, year: ac.year, quarter: ac.quarter,
+    status: ac.status, pct: ac.pct,
+    from_finding: ac.fromFinding||false,
+    finding_title: ac.findingTitle||null,
+  });
+}
+
+async function addHistoryDB(type, msg, userName){
+  await sbInsert('af_history', {type, msg, user_name: userName, created_at: new Date().toISOString()});
+}
+
+async function saveUser(user){
+  await sbUpsert('af_users', {
+    id: user.id, email: user.email, name: user.name,
+    role: user.role, initials: user.initials, status: user.status,
+    pwd: user.pwd||'',
+  });
+}
+
+var _sb = null;
+function getSB(){
+  if(!_sb) _sb = supabase.createClient(AUDITFLOW_CONFIG.supabaseUrl, AUDITFLOW_CONFIG.supabaseKey);
+  return _sb;
+}
+
+async function deleteDoc(auditId, path, name){
+  if(!confirm('Supprimer "' + name + '" ?')) return;
+  var {error} = await getSB().storage.from('auditflow-docs').remove([path]);
+  if(error){ toast('Erreur suppression : ' + error.message); return; }
+  var d = getAudData(auditId);
+  d.docs = d.docs.filter(function(f){ return f.path !== path; });
+  await saveAuditData(auditId);
+  document.getElementById('det-content').innerHTML = renderDetContent();
+  toast(name + ' supprimé ✓');
+}
