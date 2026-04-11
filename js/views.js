@@ -1,15 +1,17 @@
 const V={},I={};
 
-function calculateAuditProgress(s){
-  if(!s) return 0;
-  if(s === 'Clôturé') return 100;
-  if(s === 'Planifié') return 0;
-  if(s.includes('|')){
-    var idx = parseInt(s.split('|')[1]);
-    return Math.min(100, (idx + 1) * 10);
+// % basé sur l'étape réelle du workflow (10 étapes)
+// Étape 0=10%, 1=20%, ..., 9=100%, Clôturé=100%, Planifié=0%
+var STEP_PCT=[10,20,30,40,50,60,70,80,90,100];
+
+function calculateAuditProgress(ap){
+  if(!ap) return 0;
+  if(ap.statut==='Clôturé') return 100;
+  if(ap.statut==='Planifié') return 0;
+  if(ap.step !== undefined && ap.step !== null){
+    return STEP_PCT[Math.min(ap.step, STEP_PCT.length-1)];
   }
-  if(s === 'En cours') return 50;
-  return 0;
+  return 50; // En cours sans étape = 50%
 }
 
 V['dashboard']=()=>{
@@ -24,7 +26,7 @@ V['dashboard']=()=>{
   var auditRows=yearAudits.length?yearAudits.map(function(ap){
     var detail=ap.type==='Process'?(ap.domaine+' > '+ap.process):(ap.pays||[]).join(', ');
     var avs=(ap.auditeurs||[]).map(function(id){return avEl(id,18);}).join('');
-    var pct=calculateAuditProgress(ap.statut);
+    var pct=calculateAuditProgress(ap);
     var tb=ap.type==='Process'?'bpc':'bbu';
     var stat=badge(ap.statut||'Planifié');
     return `<tr style="cursor:pointer" onclick="openAudit(this.getAttribute('data-id'))" data-id="${ap.id}">
@@ -453,7 +455,7 @@ function renderDetTabs(){
 }
 
 function renderStepper(){
-  const phases=[[0,1,2],[3,4,5],[6,7,8,9,10]];
+  const phases=[[0,1,2],[3,4,5],[6,7,8,9]];
   const pn=['Préparation','Réalisation','Restitution'];
   const d=getAudData(CA);
   return phases.map((idxs,pi)=>`
@@ -668,16 +670,16 @@ function switchDetTab(tab){CT=tab;document.getElementById('det-tabs').innerHTML=
 
 async function validerEtape(){
   var ap=AUDIT_PLAN.find(function(a){return a.id===CA;});
-  if(CS<10){
+  if(CS<9){
     CS++;
-    if(ap)ap.statut='En cours|'+CS;
+    if(ap){ ap.statut='En cours'; ap.step=CS; }
     await saveAuditPlan(ap);
-    addHist('edit','Étape '+CS+' validée — "'+( ap?ap.titre:'')+ '"');
+    addHist('edit','Etape '+CS+' validee — '+(ap?ap.titre:''));
     goStep(CS);
-    toast('"'+STEPS[CS].s+'" validée ✓');
+    toast('"'+STEPS[CS].s+'" validee ✓');
   } else {
-    if(ap){ap.statut='Clôturé'; await saveAuditPlan(ap);}
-    toast('Mission clôturée ✓');
+    if(ap){ ap.statut='Clôturé'; ap.step=9; await saveAuditPlan(ap); }
+    toast('Mission cloturee ✓');
   }
 }
 
