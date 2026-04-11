@@ -45,6 +45,7 @@ async function loadAllData(){
       domaine:r.domaine, process:r.process, processId:r.process_id,
       entite:r.entite, region:r.region, pays:r.pays||[],
       dateDebut:r.date_debut||'', dateFin:r.date_fin||'',
+      step: r.step !== null && r.step !== undefined ? r.step : undefined,
     };
   });
   DB.processes = (await sbGet('af_processes')).map(function(r){
@@ -115,6 +116,7 @@ async function saveAuditPlan(ap){
     domaine: ap.domaine, process: ap.process, process_id: ap.processId,
     entite: ap.entite, region: ap.region, pays: ap.pays,
     date_debut: ap.dateDebut||null, date_fin: ap.dateFin||null,
+    step: ap.step !== undefined ? ap.step : null,
     updated_at: new Date().toISOString(),
   });
 }
