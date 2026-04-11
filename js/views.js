@@ -752,27 +752,12 @@ async function addFakeDoc(){
   inp.multiple = true;
   inp.onchange = async function(){
     if(!inp.files.length) return;
-    var ap = AUDIT_PLAN.find(function(a){return a.id===CA;});
-    var folderName = ap ? ap.titre.replace(/[^a-zA-Z0-9]/g,'_') : CA;
     for(var fi=0; fi<inp.files.length; fi++){
       var file = inp.files[fi];
       toast('Upload en cours : ' + file.name + '...');
       try {
-        var path = folderName + '/' + Date.now() + '_' + file.name;
-        var {data, error} = await getSB().storage
-          .from('auditflow-docs')
-          .upload(path, file, {upsert: true});
-        if(error){ toast('Erreur upload : ' + error.message); continue; }
-        var {data: urlData} = getSB().storage
-          .from('auditflow-docs')
-          .getPublicUrl(path);
-        var d = getAudData(CA);
-        var sizeTxt = file.size < 1024*1024
-          ? Math.round(file.size/1024) + ' Ko'
-          : (file.size/1024/1024).toFixed(1) + ' Mo';
-        d.docs.push({name: file.name, size: sizeTxt, url: urlData.publicUrl, path: path});
-        await saveAuditData(CA);
-        document.getElementById('det-content').innerHTML=renderDetContent();
+        await uploadDoc(CA, file);
+        document.getElementById('det-content').innerHTML = renderDetContent();
         toast(file.name + ' uploadé ✓');
       } catch(e){
         console.error('Upload error:', e);

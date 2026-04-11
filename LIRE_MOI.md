@@ -1,77 +1,117 @@
-# AuditFlow — Guide de déploiement
+# AuditFlow — Guide de déploiement Supabase
 
-## Ce que contient ce dossier
+Ce guide explique comment déployer AuditFlow en utilisant **Supabase** comme base de données et stockage de fichiers, sans dépendance à SharePoint.
 
+## Architecture
+
+L'application est une "Single Page Application" (SPA) statique qui communique directement avec Supabase. Elle peut être hébergée sur n'importe quel serveur web statique (Vercel, Netlify, GitHub Pages, ou même un serveur local).
+
+## Configuration de Supabase
+
+1. **Créer un projet** sur [Supabase](https://app.supabase.com/).
+2. **Base de données** : Exécutez le script SQL suivant dans le "SQL Editor" pour créer les tables :
+
+```sql
+-- Table des utilisateurs
+create table af_users (
+  id text primary key,
+  email text unique,
+  name text,
+  role text,
+  initials text,
+  status text,
+  pwd text, -- NOTE: En production, utilisez Supabase Auth ou hachez les mots de passe.
+  created_at timestamp with time zone default now()
+);
+
+-- Table du plan d'audit
+create table af_audit_plan (
+  id text primary key,
+  type text,
+  titre text,
+  annee integer,
+  statut text,
+  auditeurs jsonb,
+  domaine text,
+  process text,
+  process_id text,
+  entite text,
+  region text,
+  pays jsonb,
+  updated_at timestamp with time zone default now()
+);
+
+-- Table des données d'audit (tâches, contrôles, findings)
+create table af_audit_data (
+  audit_id text primary key,
+  tasks jsonb,
+  controls jsonb,
+  findings jsonb,
+  mgt_resp jsonb,
+  docs jsonb,
+  notes text,
+  maturity jsonb,
+  updated_at timestamp with time zone default now()
+);
+
+-- Table des processus
+create table af_processes (
+  id text primary key,
+  dom text,
+  proc text,
+  risk integer,
+  archived boolean default false,
+  y25 jsonb, y26 jsonb, y27 jsonb, y28 jsonb
+);
+
+-- Table des plans d'action
+create table af_actions (
+  id text primary key,
+  title text,
+  audit text,
+  resp text,
+  dept text,
+  ent text,
+  year integer,
+  quarter text,
+  status text,
+  pct integer,
+  from_finding boolean,
+  finding_title text
+);
+
+-- Table de l'historique
+create table af_history (
+  id serial primary key,
+  type text,
+  msg text,
+  user_name text,
+  created_at timestamp with time zone default now()
+);
 ```
-auditflow/
-├── index.html          ← Page principale de l'application
-├── config.js           ← ⚡ FICHIER À REMPLIR avec vos infos IT
-├── css/
-│   └── app.css         ← Styles de l'interface
-└── js/
-    ├── app.js          ← Logique principale
-    ├── auth.js         ← Authentification Azure AD (SSO)
-    ├── data.js         ← Données et constantes
-    ├── views.js        ← Toutes les pages de l'outil
-    └── sharepoint.js   ← Connexion SharePoint
-```
+
+3. **Stockage (Storage)** :
+   - Créez un bucket appelé `auditflow-docs`.
+   - Rendez-le **public** (ou configurez les politiques RLS pour l'accès).
+
+## Installation de l'application
+
+1. **Remplir config.js** :
+   Ouvrez `config.js` et remplacez les valeurs par vos clés API Supabase (trouvées dans Settings > API) :
+   ```javascript
+   supabaseUrl: 'https://votre-projet.supabase.co',
+   supabaseKey: 'votre-anon-key',
+   ```
+
+2. **Hébergement** :
+   Déposez l'intégralité des fichiers sur votre service d'hébergement.
+   L'application est accessible via le fichier `index.html`.
+
+## Connexion par défaut
+
+- **Email** : `pmassard@74Software.com`
+- **Mot de passe** : `Audit1234!`
 
 ---
-
-## Étape 1 — Remplir config.js
-
-Ouvrez le fichier `config.js` et remplacez les 3 valeurs :
-
-```javascript
-clientId:      "VOTRE_CLIENT_ID_ICI",      // ← fourni par votre IT
-tenantId:      "VOTRE_TENANT_ID_ICI",      // ← fourni par votre IT
-sharePointUrl: "VOTRE_URL_SHAREPOINT_ICI", // ← URL de votre site SharePoint
-```
-
-**Exemple une fois rempli :**
-```javascript
-clientId:      "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-tenantId:      "f9e8d7c6-b5a4-3210-fedc-ba9876543210",
-sharePointUrl: "https://votregroupe.sharepoint.com/sites/AuditInterne",
-```
-
----
-
-## Étape 2 — Déposer les fichiers sur SharePoint
-
-1. Allez sur votre site SharePoint Audit Interne
-2. Cliquez sur **Documents** dans le menu de gauche
-3. Créez un nouveau dossier appelé **AuditFlow**
-4. Ouvrez ce dossier et déposez **tous les fichiers** (y compris les sous-dossiers `css/` et `js/`)
-5. Cliquez sur `index.html` dans SharePoint
-6. Copiez l'URL de la page → c'est l'adresse de votre application
-
----
-
-## Étape 3 — Partager l'URL avec votre équipe
-
-Partagez simplement l'URL avec Philippe, Selma et Nisrine.
-Chacun se connecte avec son compte Microsoft habituel — aucun mot de passe supplémentaire.
-
----
-
-## Fonctionnement hors connexion SharePoint
-
-Si le `config.js` n'est pas encore rempli (pendant les tests), l'application fonctionne
-en mode local avec les données d'exemple. Aucune donnée n'est sauvegardée, mais vous
-pouvez naviguer et tester toutes les fonctionnalités.
-
----
-
-## Mettre à jour l'application
-
-Pour mettre à jour l'outil dans le futur :
-1. Remplacez les fichiers modifiés dans le dossier SharePoint
-2. Rechargez la page — la mise à jour est immédiate
-
----
-
-## Besoin d'aide ?
-
-Revenez sur Claude et partagez ce que vous observez.
-Toutes les modifications se font dans les fichiers `js/views.js` et `js/data.js`.
+## Mode Démo
+Si Supabase n'est pas configuré, l'application utilise les données d'exemple définies dans `js/data.js`.

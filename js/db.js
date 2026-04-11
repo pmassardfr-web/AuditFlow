@@ -150,3 +150,29 @@ async function deleteDoc(auditId, path, name){
   document.getElementById('det-content').innerHTML = renderDetContent();
   toast(name + ' supprimé ✓');
 }
+
+async function uploadDoc(auditId, file) {
+  var ap = AUDIT_PLAN.find(function(a){return a.id===auditId;});
+  var folderName = ap ? ap.titre.replace(/[^a-zA-Z0-9]/g,'_') : auditId;
+  var path = folderName + '/' + Date.now() + '_' + file.name;
+
+  var {data, error} = await getSB().storage
+    .from('auditflow-docs')
+    .upload(path, file, {upsert: true});
+
+  if(error) throw error;
+
+  var {data: urlData} = getSB().storage
+    .from('auditflow-docs')
+    .getPublicUrl(path);
+
+  var d = getAudData(auditId);
+  var sizeTxt = file.size < 1024*1024
+    ? Math.round(file.size/1024) + ' Ko'
+    : (file.size/1024/1024).toFixed(1) + ' Mo';
+
+  var docObj = {name: file.name, size: sizeTxt, url: urlData.publicUrl, path: path};
+  d.docs.push(docObj);
+  await saveAuditData(auditId);
+  return docObj;
+}
