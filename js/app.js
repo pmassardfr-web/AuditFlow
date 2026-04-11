@@ -1,4 +1,16 @@
 async function initLogin(){
+  var saved = sessionStorage.getItem('af_user');
+  if(saved){
+    try {
+      CU = JSON.parse(saved);
+      await loadAllData();
+      launchApp();
+      return;
+    } catch(e) {
+      sessionStorage.removeItem('af_user');
+    }
+  }
+
   document.getElementById('ls').style.display='flex';
   document.getElementById('app').style.display='none';
   document.getElementById('li-btn').onclick=doLogin;
@@ -55,6 +67,7 @@ async function doLogin(){
 
   errEl.style.display='none';
   CU={id:user.id, name:user.name, email:user.email, role:user.role, initials:user.initials||'?', status:'actif'};
+  sessionStorage.setItem('af_user', JSON.stringify(CU));
   launchApp();
 }
 
@@ -71,6 +84,7 @@ function launchApp(){
   document.getElementById('lbtn').onclick=function(){
     document.getElementById('app').classList.remove('is-admin');
     CU=null;
+    sessionStorage.removeItem('af_user');
     document.getElementById('li-em').value='';
     document.getElementById('li-pw').value='';
     document.getElementById('li-err').style.display='none';
