@@ -640,10 +640,33 @@ function renderDetContent(){
   }
 
   if(CT==='docs'){
-    return`<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.875rem"><div style="font-size:13px;font-weight:600">Documents</div><button class="bs" style="font-size:11px" onclick="addFakeDoc()">+ Ajouter</button></div>
-    <div class="uz" onclick="addFakeDoc()"><div style="font-size:12px;color:var(--text-2)">Glissez vos fichiers ou cliquez</div><div style="font-size:10px;color:var(--text-3);margin-top:2px">PDF, Excel, Word, PowerPoint</div></div>
-    <div id="doc-list">${buildDocList(d.docs)}</div>
-    </div>`;
+    var reqDocs=REQUIRED_DOCS[CS]||[];
+    var reqHtml='';
+    if(reqDocs.length){
+      reqHtml='<div style="background:#f0effe;border:.5px solid #AFA9EC;border-radius:6px;padding:8px 12px;margin-bottom:.75rem;font-size:11px">';
+      reqHtml+='<div style="font-weight:600;color:#3C3489;margin-bottom:5px">Documents requis pour valider cette étape :</div>';
+      reqDocs.forEach(function(req){
+        var ok=(d.docs||[]).some(function(f){return f.name.toLowerCase().indexOf(req.toLowerCase())!==-1;});
+        reqHtml+='<div style="display:flex;align-items:center;gap:6px;padding:2px 0">';
+        reqHtml+='<span style="color:'+(ok?'#1D9E75':'#E24B4A')+';font-size:14px;font-weight:bold">'+(ok?'✓':'✗')+'</span>';
+        reqHtml+='<span style="color:'+(ok?'#085041':'#A32D2D')+';'+(ok?'opacity:.7;text-decoration:line-through':'')+'">' +req+'</span>';
+        if(!ok) reqHtml+='<span style="font-size:10px;color:#A32D2D;background:#FCE8E8;padding:1px 6px;border-radius:10px">requis</span>';
+        reqHtml+='</div>';
+      });
+      reqHtml+='</div>';
+    }
+    return '<div class="card">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.875rem">'
+      +'<div style="font-size:13px;font-weight:600">Documents</div>'
+      +'<button class="bs" style="font-size:11px" onclick="addFakeDoc()">+ Ajouter</button>'
+      +'</div>'
+      +reqHtml
+      +'<div class="uz" onclick="addFakeDoc()">'
+      +'<div style="font-size:12px;color:var(--text-2)">Glissez vos fichiers ou cliquez</div>'
+      +'<div style="font-size:10px;color:var(--text-3);margin-top:2px">PDF, Excel, Word, PowerPoint</div>'
+      +'</div>'
+      +'<div id="doc-list">'+buildDocList(d.docs)+'</div>'
+      +'</div>';
   }
 
   if(CT==='notes'){
@@ -668,8 +691,42 @@ function goStep(i){
 }
 function switchDetTab(tab){CT=tab;document.getElementById('det-tabs').innerHTML=renderDetTabs();document.getElementById('det-content').innerHTML=renderDetContent();}
 
+
+// Documents requis par étape du workflow (0-indexé)
+var REQUIRED_DOCS = {
+  0: ['Audit Planning Memo'],
+  1: ['Work Program'],
+  2: ['Kick Off Slides', 'Meeting Invitation'],
+  3: ['Narratif'],
+  4: ['Testing Strategy'],
+  5: ['Testing Documentation'],
+  6: ['Rapport'],
+};
+
+function getMissingDocs(stepIndex, docs){
+  var required = REQUIRED_DOCS[stepIndex];
+  if(!required || !required.length) return [];
+  var uploadedNames = (docs||[]).map(function(f){ return f.name.toLowerCase(); });
+  return required.filter(function(req){
+    return !uploadedNames.some(function(name){
+      return name.indexOf(req.toLowerCase()) !== -1;
+    });
+  });
+}
+
 async function validerEtape(){
   var ap=AUDIT_PLAN.find(function(a){return a.id===CA;});
+  var d=getAudData(CA);
+
+  // Vérifier les documents requis pour l'étape actuelle
+  var missing=getMissingDocs(CS, d.docs);
+  if(missing.length){
+    var msg='Document(s) requis pour valider cette étape :\n';
+    missing.forEach(function(m){ msg+='  • '+m+'\n'; });
+    alert(msg);
+    return;
+  }
+
   if(CS<9){
     CS++;
     if(ap){ ap.statut='En cours'; ap.step=CS; }
