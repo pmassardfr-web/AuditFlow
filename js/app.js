@@ -99,7 +99,11 @@ function openModal(title,body,onOk){
 }
 function closeModal(){document.getElementById('modal').classList.remove('show');}
 function toast(msg){const e=document.getElementById('toast');e.textContent=msg;e.classList.add('show');setTimeout(()=>e.classList.remove('show'),2500);}
-function addHist(type,msg){HISTORY_LOG.unshift({type,msg,user:CU?.name||'—',date:new Date().toLocaleDateString('fr-FR',{day:'numeric',month:'short',year:'numeric'})});}
+function addHist(type,msg){
+  var entry={type:type,msg:msg,user:CU?CU.name:'—',date:new Date().toLocaleDateString('fr-FR',{day:'numeric',month:'short',year:'numeric'})};
+  HISTORY_LOG.unshift(entry);
+  addHistoryDB(type,msg,CU?CU.name:'—').catch(function(e){console.warn('History save failed:',e);});
+}
 
 function badge(s){return `<span class="badge ${BMAP[s]||'bpl'}">${s}</span>`}
 function pbar(s){return `<div class="pbar"><div class="pfill" style="width:${PRCT[s]||0}%"></div></div>`}

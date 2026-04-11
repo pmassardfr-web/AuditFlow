@@ -16,8 +16,13 @@ async function sbGet(table, filter){
 }
 
 async function sbUpsert(table, row){
-  var {error} = await getSB().from(table).upsert(row, {onConflict:'id'});
-  if(error) console.error('upsert', table, error);
+  var res = await getSB().from(table).upsert(row, {onConflict:'id'});
+  if(res.error){
+    console.error('Supabase upsert error ['+table+']:', res.error.message);
+    if(typeof toast === 'function') toast('Erreur sauvegarde: '+res.error.message);
+  } else {
+    console.log('Saved to '+table+' OK');
+  }
 }
 
 async function sbDelete(table, id){
@@ -68,7 +73,7 @@ async function loadAllData(){
 
 async function loadAuditData(auditId){
   if(DB.auditData[auditId]) return DB.auditData[auditId];
-  var rows = await sbGet('af_audit_data', {audit_id: auditId});
+  var rows = await sbGet('af_audit_data', {id: auditId});
   if(rows.length){
     DB.auditData[auditId] = {
       tasks:    rows[0].tasks||{},
@@ -90,7 +95,7 @@ async function saveAuditData(auditId){
   var d = AUD_DATA[auditId];
   if(!d) return;
   await sbUpsert('af_audit_data', {
-    audit_id: auditId,
+    id: auditId,
     tasks:    d.tasks,
     controls: d.controls,
     findings: d.findings,

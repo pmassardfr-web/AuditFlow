@@ -1,14 +1,5 @@
-/**
- * AuditFlow Configuration
- * Provide your Supabase credentials here.
- */
 const AUDITFLOW_CONFIG = {
-  // Supabase Configuration
-  // Get these from your Supabase Project Settings > API
-  supabaseUrl: 'YOUR_SUPABASE_URL',
-  supabaseKey: 'YOUR_SUPABASE_ANON_KEY',
-
-  // Demo Mode Configuration
-  // Used as a fallback password for demo users
-  demoPassword: 'YOUR_DEMO_PASSWORD',
+  supabaseUrl: 'https://rdukdwwicctgywyaxlgw.supabase.co',
+  supabaseKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJkdWtkd3dpY2N0Z3l3eWF4bGd3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4MjU4MjYsImV4cCI6MjA5MTQwMTgyNn0.TeGSNPW6231i1qs_ceP8o_1qaENIURDvJfdPWmZoHvI',
+  demoPassword: 'Audit1234!',
 };

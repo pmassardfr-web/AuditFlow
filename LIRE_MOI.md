@@ -43,7 +43,7 @@ create table af_audit_plan (
 
 -- Table des données d'audit (tâches, contrôles, findings)
 create table af_audit_data (
-  audit_id text primary key,
+  id text primary key,
   tasks jsonb,
   controls jsonb,
   findings jsonb,
@@ -109,7 +109,7 @@ create table af_history (
 
 ## Connexion par défaut
 
-- **Email** : `pmassard@74Software.com`
+- **Email** : `pmassard@74software.com`
 - **Mot de passe** : `Audit1234!`
 
 ---
