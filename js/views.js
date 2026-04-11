@@ -654,25 +654,24 @@ function renderTaskList(st,a){
   </div>`).join('');
 }
 
-async function toggleTask(i){const d=getAudData(CA);if(!d.tasks[CS])d.tasks[CS]=[];d.tasks[CS][i].done=!d.tasks[CS][i].done;const a=getAudits().find(x=>x.id===CA);document.getElementById('task-list').innerHTML=renderTaskList(d.tasks[CS],a);document.getElementById('stepper-card').innerHTML=renderStepper();}
-function reassignTask(i,val){const d=getAudData(CA);if(d.tasks[CS]&&d.tasks[CS][i])d.tasks[CS][i].assignee=val;document.getElementById('stepper-card').innerHTML=renderStepper();if(val!=='none')toast(`Assigné à ${TM[val]?.name}`);}
+async function toggleTask(i){const d=getAudData(CA);if(!d.tasks[CS])d.tasks[CS]=[];d.tasks[CS][i].done=!d.tasks[CS][i].done;await saveAuditData(CA);const a=getAudits().find(x=>x.id===CA);document.getElementById('task-list').innerHTML=renderTaskList(d.tasks[CS],a);document.getElementById('stepper-card').innerHTML=renderStepper();}
+async function reassignTask(i,val){const d=getAudData(CA);if(d.tasks[CS]&&d.tasks[CS][i])d.tasks[CS][i].assignee=val;await saveAuditData(CA);document.getElementById('stepper-card').innerHTML=renderStepper();if(val!=='none')toast(`Assigné à ${TM[val]?.name}`);}
 
 function showNewTaskModal(){
   const a=getAudits().find(x=>x.id===CA);
   openModal('Nouvelle tâche',`
     <div><label>Description</label><input id="t-desc" placeholder="ex : Analyser les données..."/></div>
     <div><label>Assignée à</label><select id="t-assign"><option value="none">— Non assignée</option>${buildAssigneeOpts(a.assignedTo,null)}</select></div>`,
-    ()=>{
+    async ()=>{
       const desc=document.getElementById('t-desc').value.trim();
       if(!desc){toast('Description obligatoire');return;}
       const d=getAudData(CA);if(!d.tasks[CS])d.tasks[CS]=[];
       d.tasks[CS].push({desc,assignee:document.getElementById('t-assign').value,done:false});
+      await saveAuditData(CA);
       document.getElementById('det-content').innerHTML=renderDetContent();
       document.getElementById('stepper-card').innerHTML=renderStepper();
       toast('Tâche créée ✓');
     });
-
-  saveAuditData(CA);
 }
 
 function showAddControlModal(){
@@ -684,42 +683,47 @@ function showAddControlModal(){
       <div><label>Contrôle clef ?</label><select id="c-clef"><option value="1">Oui — sera testé</option><option value="0">Non — non testé</option></select></div>
     </div>
     <div><label>Design</label><select id="c-design"><option value="existing">Existing — contrôle en place</option><option value="target">Target — contrôle non existant</option></select></div>`,
-    ()=>{
+    async ()=>{
       const name=document.getElementById('c-name').value.trim();
       if(!name){toast('Nom obligatoire');return;}
       const d=getAudData(CA);if(!d.controls[CS])d.controls[CS]=[];
       d.controls[CS].push({name,owner:document.getElementById('c-owner').value,freq:document.getElementById('c-freq').value,clef:document.getElementById('c-clef').value==='1',design:document.getElementById('c-design').value,result:null,testNature:'',finding:''});
+      await saveAuditData(CA);
       document.getElementById('det-content').innerHTML=renderDetContent();
       toast('Contrôle ajouté ✓');
     });
 }
 
-function removeControl(i){const d=getAudData(CA);d.controls[CS].splice(i,1);document.getElementById('det-content').innerHTML=renderDetContent();}
+async function removeControl(i){const d=getAudData(CA);d.controls[CS].splice(i,1);await saveAuditData(CA);document.getElementById('det-content').innerHTML=renderDetContent();}
 
-function setTestNature(i,val){const d=getAudData(CA);const kc=(d.controls[4]||[]).filter(c=>c.clef&&c.design==='existing');if(kc[i])kc[i].testNature=val;}
-function setTestResult(i,val){const d=getAudData(CA);const kc=(d.controls[4]||[]).filter(c=>c.clef&&c.design==='existing');if(kc[i]){kc[i].result=val;document.getElementById('det-content').innerHTML=renderDetContent();}}
-function setFinding(i,val){const d=getAudData(CA);const kc=(d.controls[4]||[]).filter(c=>c.clef&&c.design==='existing');if(kc[i])kc[i].finding=val;}
+async function setTestNature(i,val){const d=getAudData(CA);const kc=(d.controls[4]||[]).filter(c=>c.clef&&c.design==='existing');if(kc[i]){kc[i].testNature=val;await saveAuditData(CA);}}
+async function setTestResult(i,val){const d=getAudData(CA);const kc=(d.controls[4]||[]).filter(c=>c.clef&&c.design==='existing');if(kc[i]){kc[i].result=val;await saveAuditData(CA);document.getElementById('det-content').innerHTML=renderDetContent();}}
+async function setFinding(i,val){const d=getAudData(CA);const kc=(d.controls[4]||[]).filter(c=>c.clef&&c.design==='existing');if(kc[i]){kc[i].finding=val;await saveAuditData(CA);}}
 
 function showAddFindingModal(){
   openModal('Nouveau finding',`
     <div><label>Titre</label><input id="f-title" placeholder="ex : Absence de contrôle sur les accès"/></div>
     <div><label>Description / Observation</label><textarea id="f-desc" style="height:80px" placeholder="Décrivez l'anomalie ou l'amélioration..."></textarea></div>`,
-    ()=>{
+    async ()=>{
       const title=document.getElementById('f-title').value.trim();
       if(!title){toast('Titre obligatoire');return;}
       const d=getAudData(CA);
       d.findings.push({title,desc:document.getElementById('f-desc').value.trim()});
+      await saveAuditData(CA);
       document.getElementById('det-content').innerHTML=renderDetContent();
       toast('Finding ajouté ✓');
     });
 }
 
-function removeManualFinding(i){const d=getAudData(CA);d.findings.splice(i,1);document.getElementById('det-content').innerHTML=renderDetContent();}
+async function removeManualFinding(i){const d=getAudData(CA);d.findings.splice(i,1);await saveAuditData(CA);document.getElementById('det-content').innerHTML=renderDetContent();}
 
-function setMgtResp(findingId,field,val){
+async function setMgtResp(findingId,field,val){
   const d=getAudData(CA);
   const r=d.mgtResp.find(x=>x.findingId===findingId);
-  if(r)r[field]=val;
+  if(r){
+    r[field]=val;
+    await saveAuditData(CA);
+  }
 }
 
 function pushAllMgtResp(){
@@ -810,7 +814,7 @@ async function saveNotes(){
   toast('Notes sauvegardées ✓');
 }
 
-function finalizeTest(i){
+async function finalizeTest(i){
   const d=getAudData(CA);
   const kc=(d.controls[4]||[]).filter(x=>x.clef&&x.design==='existing');
   const ctrl=kc[i];
@@ -820,6 +824,7 @@ function finalizeTest(i){
   if(ctrl.result==='fail'&&!ctrl.finding){toast('Veuillez documenter le finding avant de finaliser');return;}
   ctrl.finalized=true;
   addHist('edit',`Test finalisé — "${ctrl.name}" : ${ctrl.result==='pass'?'Pass':'Fail'}`);
+  await saveAuditData(CA);
   document.getElementById('det-content').innerHTML=renderDetContent();
   toast(`Test "${ctrl.name}" finalisé — ${ctrl.result==='pass'?'✓ Pass':'✗ Fail'}`);
 }
@@ -1019,6 +1024,30 @@ function buildTargetList(targets){
     return '<div class="fr"><div class="fh"><span class="badge btg">Target</span><div class="ft">'+ctrl.name+'</div></div>'
       +'<div style="font-size:11px;color:var(--red)">Controle non existant a definir par '+ctrl.owner+'.</div></div>';
   }).join('');
+}
+
+function buildExecTable(kc){
+  let h = '<div class="tw"><table><thead><tr><th>Contrôle</th><th>Nature du test</th><th>Résultat</th><th>Finding / Observation</th><th>Action</th></tr></thead><tbody>';
+  kc.forEach(function(ctrl, i){
+    const dis = ctrl.finalized ? 'disabled' : '';
+    h += '<tr>';
+    h += '<td style="font-size:11px;font-weight:500">' + ctrl.name + '</td>';
+    h += '<td><select onchange="setTestNature('+i+',this.value)" '+dis+' style="font-size:11px">'
+      + '<option value="">-- Nature --</option>'
+      + '<option value="Instruction" '+(ctrl.testNature==='Instruction'?'selected':'')+'>Instruction</option>'
+      + '<option value="Observation" '+(ctrl.testNature==='Observation'?'selected':'')+'>Observation</option>'
+      + '<option value="Re-performance" '+(ctrl.testNature==='Re-performance'?'selected':'')+'>Re-performance</option>'
+      + '</select></td>';
+    h += '<td><select onchange="setTestResult('+i+',this.value)" '+dis+' style="font-size:11px">'
+      + '<option value="">-- Résultat --</option>'
+      + '<option value="pass" '+(ctrl.result==='pass'?'selected':'')+'>Pass</option>'
+      + '<option value="fail" '+(ctrl.result==='fail'?'selected':'')+'>Fail</option>'
+      + '</select></td>';
+    h += '<td>' + (ctrl.result === 'fail' ? '<textarea onchange="setFinding('+i+',this.value)" placeholder="Documentez l\'anomalie..." '+dis+' style="width:100%;font-size:10px;min-height:40px">' + (ctrl.finding||'') + '</textarea>' : '<span style="color:var(--text-3)">-</span>') + '</td>';
+    h += '<td>' + (ctrl.finalized ? '<span class="badge bdn">Finalisé</span>' : '<button class="bp" style="font-size:10px;padding:4px 8px" onclick="finalizeTest('+i+')">Finaliser</button>') + '</td>';
+    h += '</tr>';
+  });
+  return h + '</tbody></table></div>';
 }
 
 function buildDocList(docs){
