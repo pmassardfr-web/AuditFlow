@@ -19,6 +19,8 @@ var USERS=[
   {id:'pm',name:'Philippe M.',email:'pmassard@74software.com',role:'admin',status:'actif',pwd:'Audit1234!',organization_id:'00000000-0000-0000-0000-000000000001'},
   {id:'sh',name:'Selma H.',email:'shentabli@74software.com',role:'auditeur',status:'actif',pwd:'Audit1234!',organization_id:'00000000-0000-0000-0000-000000000001'},
   {id:'ne',name:'Nisrine E.',email:'nechah@74software.com',role:'auditeur',status:'actif',pwd:'Audit1234!',organization_id:'00000000-0000-0000-0000-000000000001'},
+  // Superadmin — à adapter avec votre email et mot de passe
+  {id:'superadmin',name:'Super Admin',email:'pmassard.fr@gmail.com',role:'superadmin',status:'actif',pwd:'Audit1234!',organization_id:'00000000-0000-0000-0000-000000000000'},
 ];
 let PENDING=[];
 let HISTORY_LOG=[];
@@ -38,19 +40,19 @@ let AUDIT_PLAN=[
 ];
 
 let PROCESSES=[
-  {id:'p1',dom:'Governance',proc:'Acquisitions',risk:3,archived:false,y26:{l:'SBS Integration',e:'sbs'},y27:{l:'Product Strat.',e:'both'}},
-  {id:'p2',dom:'Governance',proc:'Compliance',risk:1,archived:false,y28:{l:'Compliance / IP',e:'grp'}},
-  {id:'p3',dom:'Edition',proc:'Products & Portfolio',risk:2,archived:false,y27:{l:'Product Strat.',e:'both'}},
-  {id:'p5',dom:'Edition',proc:'Product Development',risk:2,archived:false,y26:{l:'E2E Cross PL',e:'74s'},y27:{l:'Product Devt',e:'74s'},y28:{l:'Research Tax Credit',e:'grp'}},
-  {id:'p6',dom:'Deployment',proc:'Product Deployment',risk:2,archived:false,y27:{l:'Product Deployment',e:'74s'}},
-  {id:'p7',dom:'Deployment',proc:'Product Quality & Support',risk:2,archived:false,y27:{l:'Support',e:'74s'}},
-  {id:'p8',dom:'Distribution',proc:'Go-to-Market',risk:1,archived:false,y26:{l:'GTM',e:'74s'},y28:{l:'GTM',e:'74s'}},
-  {id:'p9',dom:'Distribution',proc:'Sales & Services',risk:1,archived:false,y27:{l:'Sales',e:'both'}},
-  {id:'p10',dom:'Distribution',proc:'Customer Experience',risk:2,archived:false,y26:{l:'Customer Success',e:'74s'}},
-  {id:'p11',dom:'Support',proc:'OTC',risk:1,archived:false,y28:{l:'OTC',e:'grp'}},
-  {id:'p12',dom:'Support',proc:'Treasury & Tax',risk:1,archived:false,y26:{l:'Cash',e:'grp'},y28:{l:'Research Tax Credit',e:'grp'}},
-  {id:'p13',dom:'Support',proc:'Cybersecurity & Data',risk:3,archived:false,y27:{l:'Cybersecurity',e:'grp'}},
-  {id:'p15',dom:'Support',proc:'Budget / Forecast',risk:1,archived:false},
+  {id:'p1',dom:'Governance',proc:'Acquisitions',risk:3,riskLevel:'eleve',archived:false,y26:{l:'SBS Integration',e:'sbs'},y27:{l:'Product Strat.',e:'both'}},
+  {id:'p2',dom:'Governance',proc:'Compliance',risk:1,riskLevel:'faible',archived:false,y28:{l:'Compliance / IP',e:'grp'}},
+  {id:'p3',dom:'Edition',proc:'Products & Portfolio',risk:2,riskLevel:'modere',archived:false,y27:{l:'Product Strat.',e:'both'}},
+  {id:'p5',dom:'Edition',proc:'Product Development',risk:2,riskLevel:'modere',archived:false,y26:{l:'E2E Cross PL',e:'74s'},y27:{l:'Product Devt',e:'74s'},y28:{l:'Research Tax Credit',e:'grp'}},
+  {id:'p6',dom:'Deployment',proc:'Product Deployment',risk:2,riskLevel:'modere',archived:false,y27:{l:'Product Deployment',e:'74s'}},
+  {id:'p7',dom:'Deployment',proc:'Product Quality & Support',risk:2,riskLevel:'modere',archived:false,y27:{l:'Support',e:'74s'}},
+  {id:'p8',dom:'Distribution',proc:'Go-to-Market',risk:1,riskLevel:'faible',archived:false,y26:{l:'GTM',e:'74s'},y28:{l:'GTM',e:'74s'}},
+  {id:'p9',dom:'Distribution',proc:'Sales & Services',risk:1,riskLevel:'faible',archived:false,y27:{l:'Sales',e:'both'}},
+  {id:'p10',dom:'Distribution',proc:'Customer Experience',risk:2,riskLevel:'modere',archived:false,y26:{l:'Customer Success',e:'74s'}},
+  {id:'p11',dom:'Support',proc:'OTC',risk:1,riskLevel:'faible',archived:false,y28:{l:'OTC',e:'grp'}},
+  {id:'p12',dom:'Support',proc:'Treasury & Tax',risk:1,riskLevel:'faible',archived:false,y26:{l:'Cash',e:'grp'},y28:{l:'Research Tax Credit',e:'grp'}},
+  {id:'p13',dom:'Support',proc:'Cybersecurity & Data',risk:3,riskLevel:'critique',archived:false,y27:{l:'Cybersecurity',e:'grp'}},
+  {id:'p15',dom:'Support',proc:'Budget / Forecast',risk:1,riskLevel:'faible',archived:false},
 ];
 
 let ACTIONS=[
@@ -71,15 +73,11 @@ function getAudits(){
     if(s.includes('|')) step = parseInt(s.split('|')[1]);
     else if(base==='Clôturé') step = 10;
     else if(base==='En cours') step = 2;
-
     return {
-      id:ap.id,
-      name:ap.titre,
-      type:ap.type,
+      id:ap.id, name:ap.titre, type:ap.type,
       ent:ap.type==='BU'?ap.entite:'74S',
-      start:0,dur:ap.annee===2025?6:3,
-      status:s,
-      step:step,
+      start:0, dur:ap.annee===2025?6:3,
+      status:s, step:step,
       assignedTo:ap.auditeurs||[],
       planRef:ap.id
     };
