@@ -213,14 +213,14 @@ I['dashboard']=function(){
   if(notifBar){
     if(total>0){
       notifBar.style.display='flex';
-      notifBar.innerHTML='<span style="font-size:13px;">⚠️</span>'
-        +'<span><strong>'+total+' élément'+(total>1?'s':'')+' en retard</strong> — '
-        +(lateAudits.length?lateAudits.length+' audit'+(lateAudits.length>1?'s':''):'')
-        +(lateAudits.length&&lateActs.length?' · ':'')
-        +(lateActs.length?lateActs.length+' plan'+(lateActs.length>1?'s':'')+" d\'action":'')
-        +' nécessitent votre attention.</span>'
-        +'<button onclick="document.getElementById(\'notif-bar\').style.display=\'none\'" '
-        +'style="margin-left:auto;background:none;border:none;cursor:pointer;color:#fff;font-size:16px;padding:0 4px;">×</button>';
+      var msg=total+' élément'+(total>1?'s':'')+' en retard — ';
+      if(lateAudits.length) msg+=lateAudits.length+' audit'+(lateAudits.length>1?'s':'');
+      if(lateAudits.length&&lateActs.length) msg+=' · ';
+      if(lateActs.length) msg+=lateActs.length+' plan'+(lateActs.length>1?'s':'')+' d\u0027action';
+      msg+=' nécessitent votre attention.';
+      notifBar.innerHTML='<span style="font-size:13px;margin-right:6px;">⚠️</span><span>'+msg+'</span>'
+        +'<button onclick="document.getElementById(\'notif-bar\').style.display=\'none\'"'
+        +' style="margin-left:auto;background:none;border:none;cursor:pointer;color:#fff;font-size:18px;line-height:1;">×</button>';
     } else {
       notifBar.style.display='none';
     }
@@ -1497,7 +1497,7 @@ function exportAuditPDF(auditId){
     +'.meta{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:1rem;}'
     +'.mrow{font-size:12px;}.ml{color:#888;font-size:11px;}'
     +'@media print{body{padding:1rem;}}</style></head><body>'
-    +'<h1>Rapport d'audit — '+ap.titre+'</h1>'
+    +'<h1>Rapport d\'audit — '+ap.titre+'</h1>'
     +'<div class="meta">'
     +'<div class="mrow"><span class="ml">Type</span><br>'+ap.type+'</div>'
     +'<div class="mrow"><span class="ml">Année</span><br>'+ap.annee+'</div>'
