@@ -30,16 +30,63 @@ function calculateAuditProgress(ap){
 //  DASHBOARD
 // ══════════════════════════════════════════════════════════════
 V['dashboard']=()=>{
-  var CY=2026;
-  var yearAudits=AUDIT_PLAN.filter(function(a){return a.annee===CY;});
-  var yClosed=yearAudits.filter(function(a){return (a.statut||'').startsWith('Clôturé');});
-  var yInProg=yearAudits.filter(function(a){return (a.statut||'').startsWith('En cours');});
-  var yPlanned=yearAudits.filter(function(a){return (a.statut||'').startsWith('Planifié');});
-  var closedPct=yearAudits.length?Math.round(yClosed.length/yearAudits.length*100):0;
-  var late=ACTIONS.filter(function(a){return a.status==='En retard';}).slice(0,3);
+  // ── Année active (filtre) ─────────────────────────────────
+  if(typeof _dbYear==='undefined') window._dbYear=2026;
+  if(typeof _dbAuditeur==='undefined') window._dbAuditeur='all';
+  if(typeof _dbStatut==='undefined') window._dbStatut='all';
 
-  var auditRows=yearAudits.length?yearAudits.map(function(ap){
-    var detail=ap.type==='Process'?(ap.domaine+' > '+ap.process):(ap.pays||[]).join(', ');
+  // Toutes les années disponibles
+  var allYears=[...new Set(AUDIT_PLAN.map(function(a){return a.annee;}))].sort();
+
+  // Appliquer filtres
+  var filtered=AUDIT_PLAN.filter(function(a){
+    var okY  = a.annee===_dbYear;
+    var okA  = _dbAuditeur==='all'||(a.auditeurs||[]).includes(_dbAuditeur);
+    var okS  = _dbStatut==='all'||(a.statut||'').startsWith(_dbStatut);
+    return okY&&okA&&okS;
+  });
+
+  var yClosed  = filtered.filter(function(a){return (a.statut||'').startsWith('Clôturé');});
+  var yInProg  = filtered.filter(function(a){return (a.statut||'').startsWith('En cours');});
+  var yPlanned = filtered.filter(function(a){return (a.statut||'').startsWith('Planifié');});
+  var yLate    = filtered.filter(function(a){return (a.statut||'').startsWith('En retard');});
+  var closedPct= filtered.length?Math.round(yClosed.length/filtered.length*100):0;
+
+  // Toutes les stats pour le graphique (pas filtrées par statut)
+  var forChart=AUDIT_PLAN.filter(function(a){
+    return a.annee===_dbYear&&(_dbAuditeur==='all'||(a.auditeurs||[]).includes(_dbAuditeur));
+  });
+  var cClosed  = forChart.filter(function(a){return (a.statut||'').startsWith('Clôturé');}).length;
+  var cInProg  = forChart.filter(function(a){return (a.statut||'').startsWith('En cours');}).length;
+  var cPlanned = forChart.filter(function(a){return (a.statut||'').startsWith('Planifié');}).length;
+  var cLate    = forChart.filter(function(a){return (a.statut||'').startsWith('En retard');}).length;
+  var cTotal   = forChart.length;
+
+  var lateActions=ACTIONS.filter(function(a){return a.status==='En retard';}).slice(0,3);
+
+  // Options filtres
+  var yearOpts=allYears.map(function(y){
+    return '<option value="'+y+'"'+(_dbYear===y?' selected':'')+'>'+y+'</option>';
+  }).join('');
+
+  var audOpts='<option value="all">Tous</option>'
+    +Object.keys(TM).map(function(id){
+      return '<option value="'+id+'"'+(_dbAuditeur===id?' selected':'')+'>'+TM[id].name+'</option>';
+    }).join('');
+
+  var statOpts=[
+    {v:'all',l:'Tous statuts'},
+    {v:'Clôturé',l:'Clôturé'},
+    {v:'En cours',l:'En cours'},
+    {v:'Planifié',l:'Planifié'},
+    {v:'En retard',l:'En retard'},
+  ].map(function(o){
+    return '<option value="'+o.v+'"'+(_dbStatut===o.v?' selected':'')+'>'+o.l+'</option>';
+  }).join('');
+
+  // Tableau d'audits
+  var auditRows=filtered.length?filtered.map(function(ap){
+    var detail=ap.type==='Process'?(ap.domaine+' › '+ap.process):(ap.pays||[]).join(', ');
     var avs=(ap.auditeurs||[]).map(function(id){return avEl(id,18);}).join('');
     var pct=calculateAuditProgress(ap);
     var tb=ap.type==='Process'?'bpc':'bbu';
@@ -53,34 +100,166 @@ V['dashboard']=()=>{
       +'<td style="font-size:11px;color:var(--text-2)">'+(ap.step!==undefined&&ap.step!==null?STEPS[Math.min(ap.step,STEPS.length-1)].s:(ap.statut==='Planifié'?'—':'En cours'))+'</td>'
       +'<td><div style="display:flex;align-items:center;gap:6px"><div class="pbar" style="width:70px"><div class="pfill" style="width:'+pct+'%"></div></div><span style="font-size:10px;color:var(--text-3);white-space:nowrap">'+pct+'%</span></div></td>'
       +'</tr>';
-  }).join(''):'<tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:1rem">Aucun audit planifié en '+CY+'</td></tr>';
+  }).join(''):'<tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:1rem">Aucun audit pour ces filtres.</td></tr>';
 
-  var lateRows=late.map(function(a){
+  var lateRows=lateActions.map(function(a){
     return '<div class="ar"><div style="flex:1"><div class="an">'+a.title+'</div>'
       +'<div class="am">'+a.dept+' · '+a.quarter+' '+a.year+'</div></div>'
       +badge(a.status)+'</div>';
   }).join('')||'<div style="font-size:12px;color:var(--text-3);padding:.5rem">Aucun plan urgent</div>';
 
   var html='';
-  html+='<div class="topbar"><div class="tbtitle">Tableau de bord — '+CY+'</div>';
+  html+='<div class="topbar"><div class="tbtitle">Tableau de bord — '+_dbYear+'</div>';
   html+='<button class="bp" onclick="nav(\'plan-audit\')">+ Nouvel audit</button></div>';
-  html+='<div class="content">';
-  html+='<div class="metrics">';
-  html+='<div class="mc"><div class="ml">Audits planifiés '+CY+'</div><div class="mv">'+yearAudits.length+'</div><div class="ms">Plan annuel</div></div>';
-  html+='<div class="mc"><div class="ml">Clôturés</div><div class="mv" style="color:var(--green)">'+yClosed.length+'</div><div class="ms">'+closedPct+'% du plan</div></div>';
-  html+='<div class="mc"><div class="ml">En cours</div><div class="mv" style="color:var(--purple)">'+yInProg.length+'</div><div class="ms">Missions actives</div></div>';
-  html+='<div class="mc"><div class="ml">Planifiés (à démarrer)</div><div class="mv" style="color:var(--amber)">'+yPlanned.length+'</div><div class="ms">Non démarrés</div></div>';
+  html+='<div class="content" style="display:flex;gap:1rem;align-items:flex-start">';
+
+  // ── Colonne de filtres (gauche) ───────────────────────────
+  html+='<div style="width:180px;flex-shrink:0;display:flex;flex-direction:column;gap:10px;">';
+  html+='<div class="card" style="padding:.875rem;">';
+  html+='<div style="font-size:11px;font-weight:600;color:var(--text-2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Filtres</div>';
+
+  html+='<div style="margin-bottom:8px;">';
+  html+='<label style="font-size:10px;color:var(--text-3);display:block;margin-bottom:3px;">Année</label>';
+  html+='<select class="f-inp" style="width:100%;font-size:12px;height:30px;padding:0 8px;" onchange="dbSetYear(parseInt(this.value))">'+yearOpts+'</select>';
   html+='</div>';
-  html+='<div style="margin-bottom:1.25rem">';
-  html+='<div class="sth"><div class="st">Audits '+CY+'</div></div>';
+
+  html+='<div style="margin-bottom:8px;">';
+  html+='<label style="font-size:10px;color:var(--text-3);display:block;margin-bottom:3px;">Auditeur</label>';
+  html+='<select class="f-inp" style="width:100%;font-size:12px;height:30px;padding:0 8px;" onchange="dbSetAuditeur(this.value)">'+audOpts+'</select>';
+  html+='</div>';
+
+  html+='<div>';
+  html+='<label style="font-size:10px;color:var(--text-3);display:block;margin-bottom:3px;">Statut</label>';
+  html+='<select class="f-inp" style="width:100%;font-size:12px;height:30px;padding:0 8px;" onchange="dbSetStatut(this.value)">'+statOpts+'</select>';
+  html+='</div>';
+  html+='</div>';
+
+  // ── Métriques cliquables ──────────────────────────────────
+  html+='<div style="display:flex;flex-direction:column;gap:7px;margin-top:0;">';
+  var metrics=[
+    {label:'Total '+_dbYear,val:forChart.length,color:'var(--text)',statut:'all'},
+    {label:'Clôturés',val:cClosed,color:'var(--green)',statut:'Clôturé'},
+    {label:'En cours',val:cInProg,color:'var(--purple)',statut:'En cours'},
+    {label:'Planifiés',val:cPlanned,color:'var(--amber)',statut:'Planifié'},
+    {label:'En retard',val:cLate,color:'var(--red)',statut:'En retard'},
+  ];
+  metrics.forEach(function(m){
+    var active=_dbStatut===m.statut;
+    html+='<div onclick="dbSetStatut(\''+m.statut+'\')" style="cursor:pointer;padding:.625rem .875rem;'
+      +'background:'+(active?'var(--purple-lt)':'var(--white)')+';'
+      +'border:.5px solid '+(active?'var(--purple)':'var(--border)')+';'
+      +'border-radius:var(--radius);transition:all .15s;">'
+      +'<div style="font-size:10px;color:var(--text-2);margin-bottom:2px;">'+m.label+'</div>'
+      +'<div style="font-size:20px;font-weight:600;color:'+m.color+';">'+m.val+'</div>'
+      +'</div>';
+  });
+  html+='</div>';
+  html+='</div>';
+
+  // ── Zone principale (droite) ──────────────────────────────
+  html+='<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1rem;">';
+
+  // Graphique donut
+  html+='<div class="card" style="padding:1rem;">';
+  html+='<div style="font-size:13px;font-weight:600;margin-bottom:.75rem;">Répartition des audits '+_dbYear+'</div>';
+  html+='<div style="display:flex;align-items:center;gap:1.5rem;">';
+  html+='<canvas id="db-donut" width="140" height="140" style="flex-shrink:0;"></canvas>';
+  html+='<div style="display:flex;flex-direction:column;gap:7px;font-size:12px;">';
+  var chartItems=[
+    {label:'Clôturés',val:cClosed,color:'#5DCAA5'},
+    {label:'En cours',val:cInProg,color:'#AFA9EC'},
+    {label:'Planifiés',val:cPlanned,color:'#EF9F27'},
+    {label:'En retard',val:cLate,color:'#F0997B'},
+  ];
+  chartItems.forEach(function(ci){
+    var pct2=cTotal?Math.round(ci.val/cTotal*100):0;
+    html+='<div style="display:flex;align-items:center;gap:7px;">'
+      +'<div style="width:10px;height:10px;border-radius:50%;background:'+ci.color+';flex-shrink:0;"></div>'
+      +'<span style="color:var(--text-2);">'+ci.label+'</span>'
+      +'<span style="font-weight:600;margin-left:auto;">'+ci.val+' <span style="font-weight:400;color:var(--text-3);">('+pct2+'%)</span></span>'
+      +'</div>';
+  });
+  html+='</div></div></div>';
+
+  // Tableau des audits
+  html+='<div>';
+  html+='<div class="sth" style="margin-bottom:.625rem;">';
+  html+='<div class="st">Audits '+_dbYear+(_dbStatut!=='all'?' — '+_dbStatut:'')+(_dbAuditeur!=='all'?' — '+(TM[_dbAuditeur]&&TM[_dbAuditeur].name||_dbAuditeur):'')+' ('+filtered.length+')</div>';
+  html+='</div>';
   html+='<div class="tw"><table>';
   html+='<thead><tr><th>Titre</th><th>Type</th><th>Détail</th><th>Auditeurs</th><th>Statut</th><th>Étape</th><th>Avancement</th></tr></thead>';
   html+='<tbody>'+auditRows+'</tbody></table></div></div>';
+
+  // Plans d'action urgents
+  html+='<div>';
   html+='<div class="sth"><div class="st">Plans d\'action urgents</div><button class="bs" style="font-size:11px" onclick="nav(\'plans-action\')">Voir tout</button></div>';
   html+='<div>'+lateRows+'</div>';
   html+='</div>';
+
+  html+='</div>'; // fin zone principale
+  html+='</div>'; // fin content
   return html;
 };
+
+I['dashboard']=function(){
+  // Dessiner le donut après rendu
+  setTimeout(function(){
+    var canvas=document.getElementById('db-donut');
+    if(!canvas) return;
+    var CY=window._dbYear||2026;
+    var DA=window._dbAuditeur||'all';
+    var forChart=AUDIT_PLAN.filter(function(a){
+      return a.annee===CY&&(DA==='all'||(a.auditeurs||[]).includes(DA));
+    });
+    var cClosed  = forChart.filter(function(a){return (a.statut||'').startsWith('Clôturé');}).length;
+    var cInProg  = forChart.filter(function(a){return (a.statut||'').startsWith('En cours');}).length;
+    var cPlanned = forChart.filter(function(a){return (a.statut||'').startsWith('Planifié');}).length;
+    var cLate    = forChart.filter(function(a){return (a.statut||'').startsWith('En retard');}).length;
+    var total    = cClosed+cInProg+cPlanned+cLate;
+    if(!total) return;
+    var segments=[
+      {val:cClosed, color:'#5DCAA5'},
+      {val:cInProg, color:'#AFA9EC'},
+      {val:cPlanned,color:'#EF9F27'},
+      {val:cLate,   color:'#F0997B'},
+    ];
+    var ctx=canvas.getContext('2d');
+    var cx=70,cy=70,r=60,inner=38;
+    var start=-Math.PI/2;
+    ctx.clearRect(0,0,140,140);
+    segments.forEach(function(s){
+      if(!s.val) return;
+      var slice=2*Math.PI*(s.val/total);
+      ctx.beginPath();
+      ctx.moveTo(cx,cy);
+      ctx.arc(cx,cy,r,start,start+slice);
+      ctx.closePath();
+      ctx.fillStyle=s.color;
+      ctx.fill();
+      start+=slice;
+    });
+    // Trou central
+    ctx.beginPath();
+    ctx.arc(cx,cy,inner,0,2*Math.PI);
+    ctx.fillStyle='#fff';
+    ctx.fill();
+    // Texte central
+    ctx.fillStyle='#1A1A18';
+    ctx.font='600 20px -apple-system,system-ui,sans-serif';
+    ctx.textAlign='center';
+    ctx.textBaseline='middle';
+    ctx.fillText(total,cx,cy-8);
+    ctx.font='11px -apple-system,system-ui,sans-serif';
+    ctx.fillStyle='#9C9A92';
+    ctx.fillText('audits',cx,cy+10);
+  },60);
+};
+
+// Fonctions de filtrage dashboard
+function dbSetYear(y){window._dbYear=y;nav('dashboard');}
+function dbSetAuditeur(v){window._dbAuditeur=v;nav('dashboard');}
+function dbSetStatut(v){window._dbStatut=v;nav('dashboard');}
+
 
 // ══════════════════════════════════════════════════════════════
 //  AUDIT UNIVERSE (ex Plan Process)
