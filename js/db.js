@@ -57,6 +57,7 @@ async function loadAllData(){
     return {id:r.id,dom:r.dom,proc:r.proc,risk:r.risk,
       riskLevel:r.risk_level||'faible',
       archived:r.archived,
+      risks:r.risks||[],
       y25:r.y25,y26:r.y26,y27:r.y27,y28:r.y28};
   });
   DB.actions   = (await sbGet('af_actions')).map(function(r){
@@ -85,13 +86,15 @@ async function loadAuditData(auditId){
   var rows = await sbGet('af_audit_data', {id: auditId});
   if(rows.length){
     DB.auditData[auditId] = {
-      tasks:    rows[0].tasks||{},
-      controls: rows[0].controls||{},
-      findings: rows[0].findings||[],
-      mgtResp:  rows[0].mgt_resp||[],
-      docs:     rows[0].docs||[],
-      notes:    rows[0].notes||'',
-      maturity: rows[0].maturity||null,
+      tasks:      rows[0].tasks||{},
+      controls:   rows[0].controls||{},
+      findings:   rows[0].findings||[],
+      mgtResp:    rows[0].mgt_resp||[],
+      docs:       rows[0].docs||[],
+      notes:      rows[0].notes||'',
+      maturity:   rows[0].maturity||null,
+      riskLinks:  rows[0].risk_links||{},
+      auditRisks: rows[0].audit_risks||[],
     };
   } else {
     DB.auditData[auditId] = {tasks:{},controls:{},findings:[],mgtResp:[],docs:[],notes:'',maturity:null};
@@ -105,14 +108,16 @@ async function saveAuditData(auditId){
   if(!d) return;
   await sbUpsert('af_audit_data', {
     id: auditId,
-    tasks:    d.tasks,
-    controls: d.controls,
-    findings: d.findings,
-    mgt_resp: d.mgtResp,
-    docs:     d.docs,
-    notes:    d.notes,
-    maturity: d.maturity,
-    updated_at: new Date().toISOString(),
+    tasks:       d.tasks,
+    controls:    d.controls,
+    findings:    d.findings,
+    mgt_resp:    d.mgtResp,
+    docs:        d.docs,
+    notes:       d.notes,
+    maturity:    d.maturity,
+    risk_links:  d.riskLinks||{},
+    audit_risks: d.auditRisks||[],
+    updated_at:  new Date().toISOString(),
   });
 }
 
