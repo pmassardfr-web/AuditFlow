@@ -1,1 +1,78 @@
-{"navigationFallback":{"rewrite":"/index.html","exclude":["/css/*","/js/*","*.js","*.css","*.json","*.png","*.svg","*.ico","/.auth/*"]},"globalHeaders":{"Cache-Control":"no-cache, no-store, must-revalidate","X-Content-Type-Options":"nosniff"},"mimeTypes":{".js":"application/javascript",".css":"text/css",".json":"application/json",".svg":"image/svg+xml"},"routes":[{"route":"/login","rewrite":"/.auth/login/aad","allowedRoles":["anonymous"]},{"route":"/.auth/login/github","statusCode":404},{"route":"/.auth/login/twitter","statusCode":404},{"route":"/.auth/login/google","statusCode":404},{"route":"/.auth/*","allowedRoles":["anonymous"]},{"route":"/css/*","allowedRoles":["anonymous"]},{"route":"/js/*","allowedRoles":["anonymous"]},{"route":"/*","allowedRoles":["anonymous"]}],"responseOverrides":{"401":{"redirect":"/login","statusCode":302}}}
+{
+  "navigationFallback": {
+    "rewrite": "/index.html",
+    "exclude": [
+      "/css/*",
+      "/js/*",
+      "*.js",
+      "*.css",
+      "*.json",
+      "*.png",
+      "*.svg",
+      "*.ico",
+      "/.auth/*"
+    ]
+  },
+  "globalHeaders": {
+    "Cache-Control": "no-cache, no-store, must-revalidate",
+    "X-Content-Type-Options": "nosniff"
+  },
+  "mimeTypes": {
+    ".js": "application/javascript",
+    ".css": "text/css",
+    ".json": "application/json",
+    ".svg": "image/svg+xml"
+  },
+  "auth": {
+    "identityProviders": {
+      "azureActiveDirectory": {
+        "registration": {
+          "openIdIssuer": "https://login.microsoftonline.com/4af290c8-08df-440d-93db-cbac02bd9b19/v2.0",
+          "clientIdSettingName": "AAD_CLIENT_ID",
+          "clientSecretSettingName": "AAD_CLIENT_SECRET"
+        }
+      }
+    }
+  },
+  "routes": [
+    {
+      "route": "/login",
+      "rewrite": "/.auth/login/aad",
+      "allowedRoles": ["anonymous"]
+    },
+    {
+      "route": "/.auth/login/github",
+      "statusCode": 404
+    },
+    {
+      "route": "/.auth/login/twitter",
+      "statusCode": 404
+    },
+    {
+      "route": "/.auth/login/google",
+      "statusCode": 404
+    },
+    {
+      "route": "/.auth/*",
+      "allowedRoles": ["anonymous"]
+    },
+    {
+      "route": "/css/*",
+      "allowedRoles": ["anonymous"]
+    },
+    {
+      "route": "/js/*",
+      "allowedRoles": ["anonymous"]
+    },
+    {
+      "route": "/*",
+      "allowedRoles": ["anonymous"]
+    }
+  ],
+  "responseOverrides": {
+    "401": {
+      "redirect": "/login",
+      "statusCode": 302
+    }
+  }
+}
