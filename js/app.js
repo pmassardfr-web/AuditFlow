@@ -43,20 +43,24 @@ async function checkSSOSession() {
     if (!cp || !cp.userDetails) return null;
 
     var email = cp.userDetails.toLowerCase();
-    var displayName = cp.claims
-      ? (cp.claims.find(function(c){ return c.typ === 'name'; }) || {}).val || email
-      : email;
+    var displayName = email.split('@')[0].replace('.', ' ');
 
-    // Vérifier que cet email est autorisé dans AF_Users
-    var authUsers = await loadAuthorizedUsers();
-    var found = authUsers.find(function(u){
+    // Chercher d'abord dans USERS statiques
+    var found = USERS.find(function(u){
       return u.email && u.email.toLowerCase() === email && u.status === 'actif';
     });
 
+    // Si pas trouvé dans statiques, accepter quand même (SharePoint gérera)
     if (!found) {
-      // Email non autorisé — afficher message
-      showUnauthorized(email);
-      return null;
+      found = {
+        id: cp.userId,
+        name: displayName,
+        email: email,
+        role: 'auditeur',
+        initials: displayName.split(' ').map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,2),
+        status: 'actif',
+        source: 'sso'
+      };
     }
 
     // Stocker le token Graph pour les appels API
