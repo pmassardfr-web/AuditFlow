@@ -352,13 +352,20 @@ function calculateAuditProgress(ap){
 //  DASHBOARD
 // ══════════════════════════════════════════════════════════════
 V['dashboard']=()=>{
+  // ── Toutes les années disponibles (calculées depuis AUDIT_PLAN) ─
+  var allYears=[...new Set(AUDIT_PLAN.map(function(a){return a.annee;}).filter(function(y){return y;}))].sort();
+
   // ── Année active (filtre) ─────────────────────────────────
-  if(typeof _dbYear==='undefined') window._dbYear=2026;
+  // Par défaut : la plus récente année qui a des audits, sinon 2026
+  if(typeof _dbYear==='undefined') {
+    window._dbYear = allYears.length ? allYears[allYears.length-1] : 2026;
+  }
+  // Sécurité : si _dbYear pointe vers une année sans audits, rebasculer sur la plus récente qui en a
+  if(allYears.length && !allYears.includes(_dbYear)) {
+    window._dbYear = allYears[allYears.length-1];
+  }
   if(typeof _dbAuditeur==='undefined') window._dbAuditeur='all';
   if(typeof _dbStatut==='undefined') window._dbStatut='all';
-
-  // Toutes les années disponibles
-  var allYears=[...new Set(AUDIT_PLAN.map(function(a){return a.annee;}))].sort();
 
   // Appliquer filtres
   var filtered=AUDIT_PLAN.filter(function(a){
