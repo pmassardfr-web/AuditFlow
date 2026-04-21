@@ -32,6 +32,36 @@ async function getMsalApp() {
   return _msalApp;
 }
 
+var GRAPH_SCOPES = ['Sites.ReadWrite.All', 'Files.ReadWrite', 'User.Read'];
+
+// Flag pour indiquer qu'on est en cours de retour de redirection MSAL
+var _graphRedirectHandled = false;
+
+// À appeler au démarrage pour capturer le token si on revient d'une redirection
+async function handleGraphRedirect() {
+  if (_graphRedirectHandled) return _graphToken ? _graphToken.token : null;
+  _graphRedirectHandled = true;
+
+  try {
+    var msalApp = await getMsalApp();
+    if (!msalApp) return null;
+
+    var redirectResp = await msalApp.handleRedirectPromise();
+    if (redirectResp && redirectResp.accessToken) {
+      _graphToken = {
+        token: redirectResp.accessToken,
+        exp: redirectResp.expiresOn ? redirectResp.expiresOn.getTime() : Date.now() + 3500000,
+      };
+      sessionStorage.setItem('af_graph_token', JSON.stringify(_graphToken));
+      console.log('[MSAL] Token Graph obtenu via redirection ✓');
+      return _graphToken.token;
+    }
+  } catch(e) {
+    console.warn('[MSAL] handleRedirectPromise error:', e.message);
+  }
+  return null;
+}
+
 async function getGraphToken() {
   // Récupérer depuis sessionStorage si dispo
   if (!_graphToken) {
@@ -45,7 +75,7 @@ async function getGraphToken() {
   }
   if (_graphToken && _graphToken.exp > Date.now() + 60000) return _graphToken.token;
 
-  // Verrou : si une popup est déjà en cours, attendre sa résolution
+  // Verrou : si une acquisition est déjà en cours, attendre sa résolution
   if (_graphTokenPromise) return _graphTokenPromise;
 
   _graphTokenPromise = _doGetGraphToken().finally(function() { _graphTokenPromise = null; });
@@ -57,46 +87,52 @@ async function _doGetGraphToken() {
     var msalApp = await getMsalApp();
     if (!msalApp) throw new Error('MSAL not available');
 
+    // D'abord, voir si on revient d'une redirection (handleRedirectPromise)
+    if (!_graphRedirectHandled) {
+      var redirectToken = await handleGraphRedirect();
+      if (redirectToken) return redirectToken;
+    }
+
     var accounts = msalApp.getAllAccounts();
     var account = accounts[0];
 
-    if (!account) {
+    // Récupérer l'email SSO pour loginHint
+    var email = null;
+    try {
+      var res = await fetch('/.auth/me');
+      var data = await res.json();
+      if (data && data.clientPrincipal) email = data.clientPrincipal.userDetails;
+    } catch(e) {}
+
+    // Essai silencieux si on a un account
+    if (account) {
       try {
-        var res = await fetch('/.auth/me');
-        var data = await res.json();
-        var email = data && data.clientPrincipal && data.clientPrincipal.userDetails;
-        if (email) {
-          var loginResp = await msalApp.acquireTokenPopup({
-            loginHint: email,
-            scopes: ['Sites.ReadWrite.All', 'Files.ReadWrite', 'User.Read'],
-          });
-          account = loginResp.account;
-          _graphToken = {
-            token: loginResp.accessToken,
-            exp: loginResp.expiresOn ? loginResp.expiresOn.getTime() : Date.now() + 3500000,
-          };
-          sessionStorage.setItem('af_graph_token', JSON.stringify(_graphToken));
-          console.log('[MSAL] Token Graph via popup ✓');
-          return _graphToken.token;
-        }
+        var tokenResp = await msalApp.acquireTokenSilent({
+          account: account,
+          scopes: GRAPH_SCOPES,
+        });
+        _graphToken = {
+          token: tokenResp.accessToken,
+          exp: tokenResp.expiresOn ? tokenResp.expiresOn.getTime() : Date.now() + 3500000,
+        };
+        sessionStorage.setItem('af_graph_token', JSON.stringify(_graphToken));
+        console.log('[MSAL] Token Graph acquis silencieusement ✓');
+        return _graphToken.token;
       } catch(e) {
-        console.warn('[MSAL] Popup failed:', e.message);
+        console.warn('[MSAL] Silent failed, falling back to redirect:', e.message);
       }
     }
 
-    if (!account) throw new Error('No MSAL account found');
-
-    var tokenResp = await msalApp.acquireTokenSilent({
-      account: account,
-      scopes: ['Sites.ReadWrite.All', 'Files.ReadWrite', 'User.Read'],
+    // Fallback : redirection complète vers Microsoft (fiable, pas de popup)
+    console.log('[MSAL] Lancement redirection pour obtenir le token...');
+    sessionStorage.setItem('af_graph_redirect_pending', '1');
+    await msalApp.loginRedirect({
+      scopes: GRAPH_SCOPES,
+      loginHint: email || undefined,
+      redirectUri: AUDITFLOW_CONFIG.appUrl + '/',
     });
-    _graphToken = {
-      token: tokenResp.accessToken,
-      exp: tokenResp.expiresOn ? tokenResp.expiresOn.getTime() : Date.now() + 3500000,
-    };
-    sessionStorage.setItem('af_graph_token', JSON.stringify(_graphToken));
-    console.log('[MSAL] Token Graph acquis silencieusement ✓');
-    return _graphToken.token;
+    // La page va rediriger, donc on ne revient pas ici
+    return null;
 
   } catch(e) {
     console.warn('[Graph] Token error:', e.message);
