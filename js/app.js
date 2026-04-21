@@ -1,18 +1,23 @@
 // ═══════════════════════════════════════════════════════════
-//  app.js — Auth SSO (Entra ID) + fallback login local
+//  app.js — Auth SSO Microsoft uniquement (Entra ID)
+//  - Plus de login invité
+//  - Token Graph obtenu AVANT chargement des données
+//  - Vérification liste utilisateurs autorisés (SharePoint)
 // ═══════════════════════════════════════════════════════════
 
 // ── Point d'entrée principal ────────────────────────────────
 window.addEventListener('DOMContentLoaded', initLogin);
 
 async function initLogin() {
+  // Afficher écran de chargement
+  showLoadingScreen('Connexion en cours...');
+
   // 1. Session locale encore active ?
   var saved = sessionStorage.getItem('af_user');
   if (saved) {
     try {
       CU = JSON.parse(saved);
-      await loadAllData();
-      launchApp();
+      await bootstrapApp();
       return;
     } catch(e) {
       sessionStorage.removeItem('af_user');
@@ -21,16 +26,70 @@ async function initLogin() {
 
   // 2. Session SSO Azure SWA active ?
   var ssoUser = await checkSSOSession();
-  if (ssoUser) {
-    CU = ssoUser;
-    sessionStorage.setItem('af_user', JSON.stringify(CU));
-    await loadAllData();
-    launchApp();
+  if (!ssoUser) {
+    // Pas connecté → redirection vers Microsoft
+    // (normalement géré par staticwebapp.config.json, mais au cas où)
+    window.location.href = '/.auth/login/aad?post_login_redirect_uri=' + encodeURIComponent(window.location.href);
     return;
   }
 
-  // 3. Afficher l'écran de login
-  showLoginScreen();
+  CU = ssoUser;
+  sessionStorage.setItem('af_user', JSON.stringify(CU));
+  await bootstrapApp();
+}
+
+// ── Bootstrap : token Graph → vérif accès → chargement ──────
+async function bootstrapApp() {
+  try {
+    // 1. Obtenir le token Graph AVANT tout
+    showLoadingScreen('Connexion à SharePoint...');
+    var token = await getGraphToken();
+    if (!token) {
+      showErrorScreen(
+        'Impossible de se connecter à SharePoint',
+        'Le token Microsoft Graph n\'a pas pu être obtenu. Essayez de vous reconnecter.',
+        true
+      );
+      return;
+    }
+    console.log('[App] Token Graph prêt ✓');
+
+    // 2. Charger la liste des utilisateurs autorisés
+    showLoadingScreen('Vérification des accès...');
+    var authorizedUsers = await loadAuthorizedUsers();
+
+    // 3. Vérifier que l'utilisateur est autorisé
+    var authorized = authorizedUsers.find(function(u) {
+      return u.email && u.email.toLowerCase() === CU.email.toLowerCase()
+             && u.status === 'actif';
+    });
+
+    if (!authorized) {
+      showUnauthorizedScreen(CU.email);
+      return;
+    }
+
+    // 4. Mettre à jour CU avec les infos de SharePoint (rôle, nom exact, etc.)
+    CU.role = authorized.role || 'auditeur';
+    CU.name = authorized.name || CU.name;
+    CU.initials = authorized.initials || CU.initials;
+    sessionStorage.setItem('af_user', JSON.stringify(CU));
+
+    // 5. Charger toutes les données
+    showLoadingScreen('Chargement des données...');
+    await loadAllData();
+
+    // 6. Lancer l'appli
+    launchApp();
+
+  } catch(e) {
+    console.error('[App] Bootstrap error:', e);
+    showErrorScreen(
+      'Erreur au démarrage',
+      e.message || 'Une erreur est survenue.',
+      true
+    );
+  }
 }
 
 // ── Vérifier session SSO Azure SWA (/.auth/me) ──────────────
@@ -43,32 +102,18 @@ async function checkSSOSession() {
     if (!cp || !cp.userDetails) return null;
 
     var email = cp.userDetails.toLowerCase();
-    var displayName = email.split('@')[0].replace('.', ' ');
-
-    // Chercher d'abord dans USERS statiques
-    var found = USERS.find(function(u){
-      return u.email && u.email.toLowerCase() === email && u.status === 'actif';
-    });
-
-    // Si pas trouvé dans statiques, accepter quand même (SharePoint gérera)
-    if (!found) {
-      found = {
-        id: cp.userId,
-        name: displayName,
-        email: email,
-        role: 'auditeur',
-        initials: displayName.split(' ').map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,2),
-        status: 'actif',
-        source: 'sso'
-      };
-    }
+    var displayName = email.split('@')[0].replace(/\./g, ' ');
+    // Capitaliser chaque mot
+    displayName = displayName.split(' ').map(function(w) {
+      return w ? w[0].toUpperCase() + w.slice(1) : '';
+    }).join(' ');
 
     return {
-      id:       found.id || email,
-      name:     found.name || displayName,
+      id:       cp.userId || email,
+      name:     displayName,
       email:    email,
-      role:     found.role || 'viewer',
-      initials: found.initials || displayName.split(' ').map(function(w){return w[0];}).join('').toUpperCase().slice(0,2),
+      role:     'auditeur', // sera écrasé par bootstrapApp avec la valeur SharePoint
+      initials: displayName.split(' ').map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,2),
       status:   'actif',
       source:   'sso',
     };
@@ -77,95 +122,81 @@ async function checkSSOSession() {
   }
 }
 
-// ── Afficher l'écran de login ───────────────────────────────
-function showLoginScreen() {
-  document.getElementById('ls').style.display = 'flex';
-  document.getElementById('app').style.display = 'none';
-  document.getElementById('li-btn').onclick = doLogin;
-  document.getElementById('li-pw').onkeydown = function(e){ if(e.key==='Enter') doLogin(); };
-  document.getElementById('li-em').onkeydown = function(e){ if(e.key==='Enter') document.getElementById('li-pw').focus(); };
-  document.getElementById('li-pw').oninput = validatePwd;
-  document.getElementById('li-pw').onfocus = function(){ document.getElementById('pw-rules').style.display='block'; };
-}
+// ── Écrans de chargement / erreur ───────────────────────────
+function showLoadingScreen(msg) {
+  var ls = document.getElementById('ls');
+  var app = document.getElementById('app');
+  if (ls) ls.style.display = 'none';
+  if (app) app.style.display = 'none';
 
-// ── Message utilisateur non autorisé ───────────────────────
-function showUnauthorized(email) {
-  document.getElementById('ls').style.display = 'flex';
-  document.getElementById('app').style.display = 'none';
-  var errEl = document.getElementById('li-err');
-  errEl.innerHTML = '⛔ Accès refusé pour <strong>' + email + '</strong>.<br>Contactez l\'administrateur AuditFlow.';
-  errEl.style.display = 'block';
-}
-
-// ── Bouton SSO Microsoft ────────────────────────────────────
-function ssoLogin() {
-  var base = AUDITFLOW_CONFIG.appUrl;
-  window.location.href = base + '/.auth/login/aad?post_login_redirect_uri=' + encodeURIComponent(base + '/');
-}
-
-// ── Login fallback email + mot de passe (invités externes) ──
-function togglePwd() {
-  var inp = document.getElementById('li-pw');
-  inp.type = inp.type === 'password' ? 'text' : 'password';
-}
-
-function validatePwd() {
-  var v = document.getElementById('li-pw').value;
-  var set = function(id, ok){
-    var el = document.getElementById(id);
-    if (!el) return;
-    el.style.color = ok ? 'var(--green)' : 'var(--text-3)';
-    el.textContent = (ok ? '✓ ' : '✗ ') + el.textContent.slice(2);
-  };
-  set('r-len',  v.length >= 8);
-  set('r-maj',  /[A-Z]/.test(v));
-  set('r-spec', /[^a-zA-Z0-9]/.test(v));
-}
-
-async function doLogin() {
-  var email  = document.getElementById('li-em').value.trim().toLowerCase();
-  var pwd    = document.getElementById('li-pw').value;
-  var errEl  = document.getElementById('li-err');
-
-  if (pwd.length < 8 || !/[A-Z]/.test(pwd) || !/[^a-zA-Z0-9]/.test(pwd)) {
-    errEl.textContent = 'Le mot de passe doit contenir 8 caractères min., 1 majuscule et 1 caractère spécial.';
-    errEl.style.display = 'block';
-    return;
+  var loader = document.getElementById('af-loader');
+  if (!loader) {
+    loader = document.createElement('div');
+    loader.id = 'af-loader';
+    loader.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:20px;background:#0F0E1A;color:#fff;font-family:system-ui,sans-serif;z-index:9999;';
+    loader.innerHTML = '<div style="width:48px;height:48px;border:4px solid rgba(255,255,255,0.1);border-top-color:#5B4CF5;border-radius:50%;animation:spin 1s linear infinite"></div><div id="af-loader-msg" style="font-size:14px;color:rgba(255,255,255,0.7)"></div><style>@keyframes spin{to{transform:rotate(360deg)}}</style>';
+    document.body.appendChild(loader);
   }
+  var msgEl = document.getElementById('af-loader-msg');
+  if (msgEl) msgEl.textContent = msg || 'Chargement...';
+  loader.style.display = 'flex';
+}
 
-  var user = USERS.find(function(u) {
-    return u.email && u.email.toLowerCase() === email
-      && (u.pwd === pwd || pwd === AUDITFLOW_CONFIG.demoPassword)
-      && u.status === 'actif';
-  });
+function hideLoadingScreen() {
+  var loader = document.getElementById('af-loader');
+  if (loader) loader.style.display = 'none';
+}
 
-  if (!user) {
-    errEl.textContent = 'Email ou mot de passe incorrect, ou accès non autorisé.';
-    errEl.style.display = 'block';
-    document.getElementById('li-pw').value = '';
-    return;
-  }
+function showErrorScreen(title, msg, showRetry) {
+  hideLoadingScreen();
+  var ls = document.getElementById('ls');
+  var app = document.getElementById('app');
+  if (ls) ls.style.display = 'none';
+  if (app) app.style.display = 'none';
 
-  errEl.style.display = 'none';
-  CU = {
-    id:       user.id,
-    name:     user.name,
-    email:    user.email,
-    role:     user.role,
-    initials: user.initials || '?',
-    status:   'actif',
-    source:   'local',
-  };
-  sessionStorage.setItem('af_user', JSON.stringify(CU));
-  await loadAllData();
-  await launchApp();
+  var err = document.getElementById('af-error');
+  if (err) err.remove();
+
+  err = document.createElement('div');
+  err.id = 'af-error';
+  err.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#0F0E1A;color:#fff;font-family:system-ui,sans-serif;z-index:9999;padding:20px;';
+  err.innerHTML =
+    '<div style="max-width:480px;text-align:center;background:#1C1A2E;padding:32px;border-radius:12px;border:1px solid rgba(255,255,255,0.1)">' +
+    '<div style="font-size:48px;margin-bottom:16px">⚠️</div>' +
+    '<div style="font-size:18px;font-weight:600;margin-bottom:12px">' + title + '</div>' +
+    '<div style="font-size:14px;color:rgba(255,255,255,0.7);margin-bottom:24px;line-height:1.5">' + msg + '</div>' +
+    (showRetry ?
+      '<button onclick="location.reload()" style="background:#5B4CF5;color:#fff;border:none;padding:10px 20px;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer;margin-right:8px">Réessayer</button>' +
+      '<button onclick="window.location.href=\'/.auth/logout?post_logout_redirect_uri=/\'" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,0.2);padding:10px 20px;border-radius:6px;font-size:14px;cursor:pointer">Se déconnecter</button>'
+      : '') +
+    '</div>';
+  document.body.appendChild(err);
+}
+
+function showUnauthorizedScreen(email) {
+  showErrorScreen(
+    'Accès refusé',
+    'Votre compte <strong>' + email + '</strong> n\'est pas autorisé à accéder à AuditFlow.<br><br>Contactez l\'administrateur de l\'application pour demander un accès.',
+    false
+  );
+  // Ajouter bouton de déconnexion après
+  setTimeout(function() {
+    var err = document.getElementById('af-error');
+    if (err && !err.querySelector('button')) {
+      var btn = document.createElement('button');
+      btn.textContent = 'Se déconnecter';
+      btn.style.cssText = 'background:#5B4CF5;color:#fff;border:none;padding:10px 20px;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer;margin-top:16px';
+      btn.onclick = function() {
+        window.location.href = '/.auth/logout?post_logout_redirect_uri=/';
+      };
+      err.querySelector('div').appendChild(btn);
+    }
+  }, 100);
 }
 
 // ── Lancer l'application après auth ─────────────────────────
 async function launchApp() {
-  if (!AUDIT_PLAN || AUDIT_PLAN.length === 0) {
-    try { await loadAllData(); } catch(e) { console.warn('Data load failed:', e); }
-  }
+  hideLoadingScreen();
 
   document.getElementById('ls').style.display  = 'none';
   document.getElementById('app').style.display = 'flex';
@@ -186,7 +217,7 @@ async function launchApp() {
   // Badge source SSO
   var srcBadge = document.getElementById('sso-badge');
   if (srcBadge) {
-    srcBadge.textContent = CU.source === 'sso' ? '🔐 Microsoft' : '🔑 Local';
+    srcBadge.textContent = '🔐 Microsoft';
     srcBadge.style.display = 'block';
   }
 
@@ -196,24 +227,12 @@ async function launchApp() {
   });
 
   // Déconnexion
-  document.getElementById('lbtn').onclick = function() { doLogout(); };
+  var lbtn = document.getElementById('lbtn');
+  if (lbtn) lbtn.onclick = function() { doLogout(); };
 
   // Appliquer paramètres org
   if (typeof settingsApplyOnLoad === 'function') {
     await settingsApplyOnLoad();
-  }
-
-  // ── Obtenir le token Graph si SSO (popup autorisée car dans flux utilisateur)
-  if (CU.source === 'sso') {
-    getGraphToken().then(function(token) {
-      if (token) {
-        console.log('[App] Token Graph prêt ✓');
-      } else {
-        console.warn('[App] Token Graph non disponible — données non sauvegardées sur SharePoint');
-      }
-    }).catch(function(e) {
-      console.warn('[App] getGraphToken error:', e.message);
-    });
   }
 
   nav('dashboard');
@@ -221,27 +240,10 @@ async function launchApp() {
 
 // ── Déconnexion ──────────────────────────────────────────────
 function doLogout() {
-  var wasSSO = CU && CU.source === 'sso';
   CU = null;
   sessionStorage.removeItem('af_user');
   sessionStorage.removeItem('af_graph_token');
-
-  var app = document.getElementById('app');
-  app.classList.remove('is-admin', 'is-viewer');
-
-  if (wasSSO) {
-    window.location.href = AUDITFLOW_CONFIG.appUrl + '/.auth/logout?post_logout_redirect_uri=' + encodeURIComponent(AUDITFLOW_CONFIG.appUrl + '/');
-    return;
-  }
-
-  // Login local : reset formulaire
-  var em = document.getElementById('li-em');
-  var pw = document.getElementById('li-pw');
-  if (em) em.value = '';
-  if (pw) pw.value = '';
-  var errEl = document.getElementById('li-err');
-  if (errEl) errEl.style.display = 'none';
-  initLogin();
+  window.location.href = '/.auth/logout?post_logout_redirect_uri=/';
 }
 
 // ── Navigation ───────────────────────────────────────────────
