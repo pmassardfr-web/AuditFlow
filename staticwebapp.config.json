@@ -23,19 +23,32 @@
     ".json": "application/json",
     ".svg": "image/svg+xml"
   },
+  "responseOverrides": {
+    "401": {
+      "redirect": "/.auth/login/aad",
+      "statusCode": 302
+    }
+  },
   "routes": [
     {
-      "route": "/login",
-      "rewrite": "/.auth/login/aad",
+      "route": "/.auth/login/aad/callback",
       "allowedRoles": ["anonymous"]
     },
     {
-      "route": "/.auth/*",
+      "route": "/.auth/login/aad",
       "allowedRoles": ["anonymous"]
+    },
+    {
+      "route": "/.auth/logout",
+      "allowedRoles": ["anonymous", "authenticated"]
+    },
+    {
+      "route": "/.auth/me",
+      "allowedRoles": ["anonymous", "authenticated"]
     },
     {
       "route": "/*",
-      "allowedRoles": ["anonymous"]
+      "allowedRoles": ["authenticated"]
     }
   ]
 }
