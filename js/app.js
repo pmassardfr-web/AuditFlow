@@ -63,14 +63,6 @@ async function checkSSOSession() {
       };
     }
 
-    // Stocker le token Graph pour les appels API
-    if (cp.accessToken) {
-      sessionStorage.setItem('af_graph_token', JSON.stringify({
-        token: cp.accessToken,
-        exp: Date.now() + 3500000,
-      }));
-    }
-
     return {
       id:       found.id || email,
       name:     found.name || displayName,
@@ -81,7 +73,6 @@ async function checkSSOSession() {
       source:   'sso',
     };
   } catch(e) {
-    // /.auth/me non disponible (dev local) — silencieux
     return null;
   }
 }
@@ -142,7 +133,6 @@ async function doLogin() {
     return;
   }
 
-  // Chercher dans les utilisateurs locaux (USERS de data.js)
   var user = USERS.find(function(u) {
     return u.email && u.email.toLowerCase() === email
       && (u.pwd === pwd || pwd === AUDITFLOW_CONFIG.demoPassword)
@@ -206,13 +196,24 @@ async function launchApp() {
   });
 
   // Déconnexion
-  document.getElementById('lbtn').onclick = function() {
-    doLogout();
-  };
+  document.getElementById('lbtn').onclick = function() { doLogout(); };
 
   // Appliquer paramètres org
   if (typeof settingsApplyOnLoad === 'function') {
     await settingsApplyOnLoad();
+  }
+
+  // ── Obtenir le token Graph si SSO (popup autorisée car dans flux utilisateur)
+  if (CU.source === 'sso') {
+    getGraphToken().then(function(token) {
+      if (token) {
+        console.log('[App] Token Graph prêt ✓');
+      } else {
+        console.warn('[App] Token Graph non disponible — données non sauvegardées sur SharePoint');
+      }
+    }).catch(function(e) {
+      console.warn('[App] getGraphToken error:', e.message);
+    });
   }
 
   nav('dashboard');
@@ -220,14 +221,15 @@ async function launchApp() {
 
 // ── Déconnexion ──────────────────────────────────────────────
 function doLogout() {
-  var app = document.getElementById('app');
-  app.classList.remove('is-admin', 'is-viewer');
+  var wasSSO = CU && CU.source === 'sso';
   CU = null;
   sessionStorage.removeItem('af_user');
   sessionStorage.removeItem('af_graph_token');
 
-  // Si SSO : déconnexion Azure
-  if (CU && CU.source === 'sso') {
+  var app = document.getElementById('app');
+  app.classList.remove('is-admin', 'is-viewer');
+
+  if (wasSSO) {
     window.location.href = AUDITFLOW_CONFIG.appUrl + '/.auth/logout?post_logout_redirect_uri=' + encodeURIComponent(AUDITFLOW_CONFIG.appUrl + '/');
     return;
   }
