@@ -15,6 +15,7 @@ var DB = {
 var _graphToken = null;
 var _msalApp = null;
 var _graphTokenPromise = null;
+var _redirectCount = 0; // Compteur en mémoire (reset à chaque chargement de page)
 
 async function getMsalApp() {
   if (_msalApp) return _msalApp;
@@ -123,22 +124,37 @@ async function _doGetGraphToken() {
         console.log('[MSAL] Token Graph acquis silencieusement ✓');
         return _graphToken.token;
       } catch(e) {
-        console.warn('[MSAL] Silent failed, falling back to redirect:', e.message);
+        console.warn('[MSAL] Silent failed, falling back to ssoSilent:', e.message);
+      }
+    }
+
+    // Essai ssoSilent (utilise les cookies Microsoft de l'utilisateur déjà connecté)
+    if (email) {
+      try {
+        var ssoResp = await msalApp.ssoSilent({
+          loginHint: email,
+          scopes: GRAPH_SCOPES,
+        });
+        _graphToken = {
+          token: ssoResp.accessToken,
+          exp: ssoResp.expiresOn ? ssoResp.expiresOn.getTime() : Date.now() + 3500000,
+        };
+        sessionStorage.setItem('af_graph_token', JSON.stringify(_graphToken));
+        console.log('[MSAL] Token Graph acquis via ssoSilent ✓');
+        return _graphToken.token;
+      } catch(e) {
+        console.warn('[MSAL] ssoSilent failed, falling back to redirect:', e.message);
       }
     }
 
     // Fallback : redirection complète vers Microsoft (fiable, pas de popup)
-    // Protection anti-boucle : max 2 tentatives de redirection par session
-    var attempts = parseInt(sessionStorage.getItem('af_graph_redirect_attempts') || '0');
-    if (attempts >= 2) {
-      console.error('[MSAL] Trop de tentatives de redirection, abandon');
-      sessionStorage.removeItem('af_graph_redirect_attempts');
-      sessionStorage.removeItem('af_graph_redirect_pending');
-      throw new Error('Impossible d\'obtenir le token après plusieurs tentatives. Essayez de vous déconnecter et reconnecter.');
+    // Protection anti-boucle en mémoire (reset à chaque chargement de page)
+    _redirectCount++;
+    if (_redirectCount > 2) {
+      throw new Error('Impossible d\'obtenir le token. Videz le cache de votre navigateur ou essayez en navigation privée.');
     }
-    sessionStorage.setItem('af_graph_redirect_attempts', String(attempts + 1));
 
-    console.log('[MSAL] Lancement redirection pour obtenir le token... (tentative ' + (attempts+1) + ')');
+    console.log('[MSAL] Lancement redirection pour obtenir le token... (tentative ' + _redirectCount + ')');
     sessionStorage.setItem('af_graph_redirect_pending', '1');
     await msalApp.loginRedirect({
       scopes: GRAPH_SCOPES,
