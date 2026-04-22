@@ -989,10 +989,15 @@ async function gsRemoveCountry(entId,regId,country){
 //  PLAN AUDIT (inchangé)
 // ══════════════════════════════════════════════════════════════
 V['plan-audit']=()=>`
-  <div class="topbar"><div class="tbtitle">Plan Audit</div><button class="bp ao" onclick="showAddAuditModal()">+ Ajouter un audit</button></div>
+  <div class="topbar"><div class="tbtitle">Plan Audit</div><button class="bp ao" onclick="showAddAuditModal()">+ Ajouter une mission</button></div>
   <div class="content">
     <div style="display:flex;gap:8px;margin-bottom:1rem">
-      <select id="f-pa-type" onchange="renderPlanAuditTable()"><option value="all">Process + BU</option><option value="Process">Process</option><option value="BU">BU</option></select>
+      <select id="f-pa-type" onchange="renderPlanAuditTable()">
+        <option value="all">Toutes missions</option>
+        <option value="Process">Process Audit</option>
+        <option value="BU">BU Audit</option>
+        <option value="Other">Autres missions</option>
+      </select>
       <select id="f-pa-year" onchange="renderPlanAuditTable()"><option value="all">Toutes années</option><option value="2025">2025</option><option value="2026">2026</option><option value="2027">2027</option><option value="2028">2028</option></select>
     </div>
     <div class="tw"><table id="pa-tbl"></table></div>
@@ -1016,13 +1021,13 @@ function renderPlanAuditTable(){
     rows.forEach(function(ap){
       var idx=AUDIT_PLAN.indexOf(ap);
       var detail;
+      var typeBadgeHtml;
       if (ap.type==='Process') {
         // Support multi-processus
         var pids = (Array.isArray(ap.processIds) && ap.processIds.length)
           ? ap.processIds
           : (ap.processId ? [ap.processId] : []);
         if (pids.length > 1) {
-          // Plusieurs processus : afficher le domaine + liste compacte
           var procNames = pids.map(function(pid){
             var p = PROCESSES.find(function(x){return x.id===pid;});
             return p ? p.proc : pid;
@@ -1031,18 +1036,28 @@ function renderPlanAuditTable(){
         } else {
           detail = '<span style="font-size:11px"><strong>'+(ap.domaine||'')+'</strong> › '+(ap.process||'')+'</span>';
         }
+        typeBadgeHtml = '<span class="badge bpc">Process</span>';
+      } else if (ap.type==='Other') {
+        // Mission "Other" : catégorie + description
+        var cat = ap.categorie || 'Autre';
+        var colors = getOtherCategoryColors(cat);
+        var desc = ap.description
+          ? '<div style="font-size:10px;color:var(--text-3);margin-top:2px;font-style:italic">'+ap.description+'</div>'
+          : '';
+        detail = '<span style="font-size:11px"><strong style="color:'+colors.color+'">'+cat+'</strong>'+desc+'</span>';
+        typeBadgeHtml = '<span class="badge" style="background:'+colors.bg+';color:'+colors.color+'">Autre</span>';
       } else {
         detail = '<span style="font-size:11px"><strong>'+(ap.entite||'')+'</strong> · '+(ap.region||'')+' · '+(ap.pays||[]).join(', ')+'</span>';
+        typeBadgeHtml = '<span class="badge bbu">BU</span>';
       }
       var avs=(ap.auditeurs||[]).map(function(id){return avEl(id,20);}).join('');
-      var tb=ap.type==='Process'?'bpc':'bbu';
       var mns=['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
       var dateStr=ap.dateDebut||ap.dateFin
         ?'<div style="font-size:10px;color:#888">'+((ap.dateDebut?mns[parseInt(ap.dateDebut)-1]:'?')+' → '+(ap.dateFin?mns[parseInt(ap.dateFin)-1]:'?'))+'</div>':'';
       var adminBtn=CU&&CU.role==='admin'
         ?'<td style="white-space:nowrap"><button class="bs" style="font-size:10px;padding:2px 7px" onclick="showEditAuditModal('+idx+')">Modifier</button> <button class="bd" style="font-size:10px;padding:2px 7px" onclick="deleteAudit('+idx+')">Supprimer</button></td>':'';
       h+='<tr>'
-        +'<td><span class="badge '+tb+'">'+ap.type+'</span></td>'
+        +'<td>'+typeBadgeHtml+'</td>'
         +'<td style="font-weight:500;font-size:12px">'+ap.titre+'</td>'
         +'<td>'+detail+'</td>'
         +'<td style="font-weight:500;color:var(--purple-dk)">'+ap.annee+dateStr+'</td>'
@@ -1090,8 +1105,8 @@ function auditModalBody(ap){
   }
 
   var h='';
-  h+='<div><label>Type d\'audit</label><select id="m-type" onchange="toggleAuditTypeFields(this.value)"><option value="Process"'+(type==='Process'?' selected':'')+'>Process Audit</option><option value="BU"'+(type==='BU'?' selected':'')+'>BU Audit</option></select></div>';
-  h+='<div id="m-proc-fields" style="'+(type==='BU'?'display:none':'')+'">';
+  h+='<div><label>Type de mission</label><select id="m-type" onchange="toggleAuditTypeFields(this.value)"><option value="Process"'+(type==='Process'?' selected':'')+'>Process Audit</option><option value="BU"'+(type==='BU'?' selected':'')+'>BU Audit</option><option value="Other"'+(type==='Other'?' selected':'')+'>🗂️ Autre mission (Sapin 2, URD, Comité...)</option></select></div>';
+  h+='<div id="m-proc-fields" style="'+(type!=='Process'?'display:none':'')+'">';
   h+='<div><label>Processus couverts <span style="color:var(--red)">*</span></label>';
   h+='<div style="font-size:10px;color:var(--text-3);margin-bottom:5px">Cochez un ou plusieurs processus (multi-domaines autorisés)</div>';
   h+='<div id="m-proc-list" style="max-height:220px;overflow-y:auto;border:.5px solid var(--border);border-radius:var(--radius);padding:8px 10px;background:var(--bg-card)">'
@@ -1111,6 +1126,23 @@ function auditModalBody(ap){
   allRegs.forEach(function(r){h+='<option'+(ap&&ap.region===r?' selected':'')+'>'+r+'</option>';});
   h+='</select></div>';
   h+='<div><label>Pays (séparés par des virgules)</label><input id="m-pays" placeholder="ex : Maroc, Tunisie" value="'+((ap&&ap.pays||[]).join(', '))+'"/></div></div>';
+
+  // Bloc "Other mission" (Sapin 2, URD, Comité...)
+  var cats = getAllOtherCategories();
+  var currentCat = (ap && ap.categorie) || '';
+  var catOpts = cats.map(function(c){
+    return '<option value="'+c+'"'+(currentCat===c?' selected':'')+'>'+c+'</option>';
+  }).join('');
+  h+='<div id="m-other-fields" style="'+(type!=='Other'?'display:none':'')+'">';
+  h+='<div><label>Catégorie <span style="color:var(--red)">*</span></label>';
+  h+='<div style="display:flex;gap:6px">';
+  h+='<select id="m-other-cat" style="flex:1">'+catOpts+'<option value="__new__">+ Nouvelle catégorie...</option></select>';
+  h+='</div>';
+  h+='<input id="m-other-cat-new" placeholder="Nom de la nouvelle catégorie" style="display:none;margin-top:5px"/>';
+  h+='</div>';
+  h+='<div><label>Description</label><textarea id="m-other-desc" style="width:100%;min-height:60px;resize:vertical" placeholder="Description de la mission (facultatif)">'+((ap&&ap.description)||'')+'</textarea></div>';
+  h+='</div>';
+
   h+='<div><label>Titre de la mission</label><input id="m-titre" placeholder="ex : BU Maroc 2025" value="'+((ap&&ap.titre)||'')+'"/></div>';
   h+='<div class="g2"><div><label>Année</label><select id="m-annee">';
   [2025,2026,2027,2028].forEach(function(y){h+='<option'+(ap&&ap.annee===y?' selected':'')+'>'+y+'</option>';});
@@ -1167,8 +1199,26 @@ function auditModalBody(ap){
 }
 
 function toggleAuditTypeFields(val){
-  document.getElementById('m-proc-fields').style.display=val==='BU'?'none':'';
-  document.getElementById('m-bu-fields').style.display=val==='BU'?'':'none';
+  var procEl = document.getElementById('m-proc-fields');
+  var buEl = document.getElementById('m-bu-fields');
+  var otherEl = document.getElementById('m-other-fields');
+  if (procEl) procEl.style.display = val==='Process' ? '' : 'none';
+  if (buEl) buEl.style.display = val==='BU' ? '' : 'none';
+  if (otherEl) otherEl.style.display = val==='Other' ? '' : 'none';
+  // Adapter le statut : si Other, proposer "Fait" au lieu de "Clôturé"
+  var statutEl = document.getElementById('m-statut');
+  if (statutEl) {
+    var current = statutEl.value;
+    if (val==='Other') {
+      statutEl.innerHTML = '<option value="Planifié"'+(current==='Planifié'?' selected':'')+'>Planifié</option>'
+        + '<option value="En cours"'+(current==='En cours'?' selected':'')+'>En cours</option>'
+        + '<option value="Fait"'+(current==='Fait'||current==='Clôturé'?' selected':'')+'>Fait</option>';
+    } else {
+      statutEl.innerHTML = '<option value="Planifié"'+(current==='Planifié'?' selected':'')+'>Planifié</option>'
+        + '<option value="En cours"'+(current==='En cours'?' selected':'')+'>En cours</option>'
+        + '<option value="Clôturé"'+(current==='Clôturé'||current==='Fait'?' selected':'')+'>Clôturé</option>';
+    }
+  }
 }
 
 // Mettre à jour le compteur de processus sélectionnés (appelé sur change)
@@ -1230,6 +1280,25 @@ function collectAuditModal(){
       processId: processIds[0],        // compat ancien champ (premier process)
       processIds: processIds,          // nouveau tableau complet
     });
+  } else if (type==='Other') {
+    // Collecter catégorie et description
+    var catEl = document.getElementById('m-other-cat');
+    var catNewEl = document.getElementById('m-other-cat-new');
+    var descEl = document.getElementById('m-other-desc');
+    var categorie = '';
+    if (catEl && catEl.value === '__new__') {
+      // Nouvelle catégorie saisie
+      categorie = (catNewEl && catNewEl.value || '').trim();
+      if (!categorie) { toast('Nom de la nouvelle catégorie requis'); return null; }
+    } else {
+      categorie = catEl ? catEl.value : '';
+    }
+    if (!categorie) { toast('Catégorie obligatoire'); return null; }
+    var description = descEl ? descEl.value.trim() : '';
+    return Object.assign({}, base, {
+      categorie: categorie,
+      description: description,
+    });
   } else {
     return Object.assign({},base,{entite:document.getElementById('m-ent').value,region:document.getElementById('m-reg').value,pays:document.getElementById('m-pays').value.split(',').map(function(s){return s.trim();}).filter(Boolean)});
   }
@@ -1265,7 +1334,21 @@ function attachProcCheckboxListeners() {
     cbs.forEach(function(cb){
       cb.addEventListener('change', updateProcCount);
     });
-    updateProcCount(); // Affichage initial
+    updateProcCount();
+
+    // Listener pour le select de catégorie (Other missions)
+    var catSelect = document.getElementById('m-other-cat');
+    var catNewInput = document.getElementById('m-other-cat-new');
+    if (catSelect && catNewInput) {
+      catSelect.addEventListener('change', function(){
+        if (catSelect.value === '__new__') {
+          catNewInput.style.display = 'block';
+          catNewInput.focus();
+        } else {
+          catNewInput.style.display = 'none';
+        }
+      });
+    }
   }, 50);
 }
 async function deleteAudit(idx){
