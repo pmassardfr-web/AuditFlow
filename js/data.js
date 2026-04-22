@@ -5,11 +5,14 @@ const STEPS=[
   {s:'Report',ph:3},{s:'Report Restitution',ph:3},{s:'Management Responses',ph:3},
   {s:'Exec. Committee Report',ph:3}
 ];
+// Étapes "clés" qui nécessitent un workflow de revue (finalisation + revue par admin)
+// Les autres étapes gardent le fonctionnement simple (juste "Valider l'étape")
+const KEY_STEPS = [2, 4, 5, 6, 8]; // Kick Off, Testing Strategy, Testings, Report, Mgt Responses
 const PRCT={'Préparation':10,'Exécution':50,'Revue':80,'Clôturé':100,'Planifié':0,'Restitution':90};
 const BMAP={'Préparation':'bp2','Exécution':'be','Revue':'br2','Clôturé':'bdn','Planifié':'bpl','Restitution':'br2','En retard':'blt','En cours':'be','Non démarré':'bpl'};
 const GC=['#AFA9EC','#85B7EB','#5DCAA5','#EF9F27','#F0997B','#97C459','#AFA9EC','#85B7EB','#5DCAA5','#EF9F27'];
-const AVC={pm:'background:#CECBF6;color:#3C3489',sh:'background:#9FE1CB;color:#085041',ne:'background:#B5D4F4;color:#0C447C'};
-const TM={pm:{name:'Philippe M.',short:'PM',role:'admin',title:'Directeur Audit Interne'},sh:{name:'Selma H.',short:'SH',role:'auditeur',title:'Auditrice'},ne:{name:'Nisrine E.',short:'NE',role:'auditeur',title:'Auditrice'}};
+var AVC={pm:'background:#CECBF6;color:#3C3489',sh:'background:#9FE1CB;color:#085041',ne:'background:#B5D4F4;color:#0C447C'};
+var TM={pm:{name:'Philippe M.',short:'PM',role:'admin',title:'Directeur Audit Interne'},sh:{name:'Selma H.',short:'SH',role:'auditeur',title:'Auditrice'},ne:{name:'Nisrine E.',short:'NE',role:'auditeur',title:'Auditrice'}};
 const RS={1:'<span style="color:var(--green)">★</span>',2:'<span style="color:var(--amber)">★★</span>',3:'<span style="color:var(--red)">★★★</span>'};
 const ENT={sbs:'<span class="badge bsbs">SBS</span>',axw:'<span class="badge baxw">AXW</span>','74s':'<span class="badge bpc">74S</span>',both:'<span class="badge" style="background:var(--amber-lt);color:#633806">SBS/AXW</span>',grp:'<span class="badge bgrp">Groupe</span>'};
 
