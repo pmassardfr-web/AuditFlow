@@ -222,6 +222,7 @@ var LIST_SCHEMAS = {
     {name:'af_id',text:{}},{name:'type',text:{}},{name:'titre',text:{}},
     {name:'annee',number:{}},{name:'statut',text:{}},{name:'auditeurs',text:{}},
     {name:'domaine',text:{}},{name:'process',text:{}},{name:'process_id',text:{}},
+    {name:'process_ids_json',text:{}},
     {name:'entite',text:{}},{name:'region',text:{}},{name:'pays',text:{}},
     {name:'date_debut',text:{}},{name:'date_fin',text:{}},{name:'step_num',number:{}},
   ],
@@ -338,14 +339,25 @@ async function loadAllData() {
       initials:f.initials||'', status:f.status||'actif', pwd:f.pwd||'', source:f.source||'local',
     };});
 
-    DB.auditPlan = planRaw.map(function(r){ var f=r.fields; return {
-      id:f.af_id, type:f.type, titre:f.titre||f.Title, annee:parseInt(f.annee)||2026,
-      statut:f.statut||'Planifié', auditeurs:tryParse(f.auditeurs,[]),
-      domaine:f.domaine, process:f.process, processId:f.process_id,
-      entite:f.entite, region:f.region, pays:tryParse(f.pays,[]),
-      dateDebut:f.date_debut||'', dateFin:f.date_fin||'',
-      step:f.step_num!=null&&f.step_num!==undefined?parseInt(f.step_num):undefined,
-    };});
+    DB.auditPlan = planRaw.map(function(r){
+      var f=r.fields;
+      // Support multi-processus : priorité à process_ids_json (nouveau) sinon fallback sur process_id (ancien)
+      var processIds = tryParse(f.process_ids_json, null);
+      if (!Array.isArray(processIds) || !processIds.length) {
+        // Migration auto : utilise process_id (ancien champ mono)
+        processIds = f.process_id ? [f.process_id] : [];
+      }
+      return {
+        id:f.af_id, type:f.type, titre:f.titre||f.Title, annee:parseInt(f.annee)||2026,
+        statut:f.statut||'Planifié', auditeurs:tryParse(f.auditeurs,[]),
+        domaine:f.domaine, process:f.process,
+        processId:f.process_id,        // gardé pour compat affichage
+        processIds: processIds,        // NOUVEAU — tableau d'IDs de processus
+        entite:f.entite, region:f.region, pays:tryParse(f.pays,[]),
+        dateDebut:f.date_debut||'', dateFin:f.date_fin||'',
+        step:f.step_num!=null&&f.step_num!==undefined?parseInt(f.step_num):undefined,
+      };
+    });
 
     DB.processes = procRaw.map(function(r){ var f=r.fields; return {
       id:f.af_id, dom:f.dom, proc:f.proc||f.Title, risk:parseInt(f.risk)||1,
@@ -416,10 +428,22 @@ async function saveAuditData(auditId) {
 }
 
 async function saveAuditPlan(ap) {
+  // Assurer cohérence : si processIds existe, on en déduit processId (le premier) pour compat
+  if (Array.isArray(ap.processIds) && ap.processIds.length) {
+    ap.processId = ap.processIds[0];
+    // Reconstruire le libellé "process" (liste des noms joints)
+    var procNames = ap.processIds.map(function(pid){
+      var p = PROCESSES.find(function(x){return x.id===pid;});
+      return p ? p.proc : pid;
+    });
+    ap.process = procNames.join(', ');
+  }
   await spUpsert('AF_AuditPlan', ap.id, {
     type:ap.type, titre:ap.titre, annee:ap.annee, statut:ap.statut,
     auditeurs:JSON.stringify(ap.auditeurs), domaine:ap.domaine||'',
-    process:ap.process||'', process_id:ap.processId||'', entite:ap.entite||'',
+    process:ap.process||'', process_id:ap.processId||'',
+    process_ids_json: JSON.stringify(ap.processIds||[]),
+    entite:ap.entite||'',
     region:ap.region||'', pays:JSON.stringify(ap.pays||[]),
     date_debut:ap.dateDebut||'', date_fin:ap.dateFin||'',
     step_num:ap.step!==undefined?ap.step:null, Title:ap.titre,
