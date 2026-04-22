@@ -1602,7 +1602,7 @@ function renderAuditList(){
     :'<div style="font-size:12px;color:var(--text-3);padding:.5rem">Aucun audit.</div>';
 }
 
-async function openAudit(id){CA=id;var found=getAudits().find(function(a){return a.id===id;});CS=found?found.step||0:0;CT='roles';await loadAuditData(id);nav('audit-detail');}
+async function openAudit(id){CA=id;var found=getAudits().find(function(a){return a.id===id;});var step=found?found.step||0:0;CS=Math.max(0,Math.min(9,step));CT='roles';await loadAuditData(id);nav('audit-detail');}
 
 // (Le reste des fonctions audit-detail, contrôles, findings, maturity, mgt-resp, docs, notes
 //  sont strictement identiques à l'original — on les conserve tels quels)
@@ -1610,6 +1610,9 @@ async function openAudit(id){CA=id;var found=getAudits().find(function(a){return
 V['audit-detail']=()=>{
   const a=getAudits().find(x=>x.id===CA);
   if(!a) return '<div class="content">Audit introuvable.</div>';
+  // Sécurité : CS doit toujours être entre 0 et 9
+  if(typeof CS!=='number' || CS<0 || CS>9) CS=0;
+  const step=STEPS[CS]||{s:'—'};
   const pct = Math.min(100, (CS + 1) * 10);
   return `
     <div class="topbar">
@@ -1630,7 +1633,7 @@ V['audit-detail']=()=>{
         </div>
       </div>
       <div class="card" style="display:flex;align-items:center;gap:12px;margin-bottom:1rem">
-        <span style="font-size:11px;color:var(--text-2);white-space:nowrap" id="gp-lbl">Étape ${CS+1}/11 — ${STEPS[CS].s}</span>
+        <span style="font-size:11px;color:var(--text-2);white-space:nowrap" id="gp-lbl">Étape ${CS+1}/11 — ${step.s}</span>
         <div class="pbar" style="flex:1"><div class="pfill" id="gp-fill" style="width:${pct}%"></div></div>
         <span style="font-size:11px;color:var(--text-2)" id="gp-pct">${pct}%</span>
       </div>
