@@ -225,6 +225,7 @@ var LIST_SCHEMAS = {
     {name:'process_ids_json',text:{}},
     {name:'entite',text:{}},{name:'region',text:{}},{name:'pays',text:{}},
     {name:'date_debut',text:{}},{name:'date_fin',text:{}},{name:'step_num',number:{}},
+    {name:'categorie',text:{}},{name:'description',text:{}},
   ],
   AF_Processes: [
     {name:'af_id',text:{}},{name:'dom',text:{}},{name:'proc',text:{}},
@@ -356,6 +357,8 @@ async function loadAllData() {
         entite:f.entite, region:f.region, pays:tryParse(f.pays,[]),
         dateDebut:f.date_debut||'', dateFin:f.date_fin||'',
         step:f.step_num!=null&&f.step_num!==undefined?parseInt(f.step_num):undefined,
+        categorie:f.categorie||'',     // NOUVEAU — pour les missions "Other"
+        description:f.description||'', // NOUVEAU — description libre
       };
     });
 
@@ -447,6 +450,7 @@ async function saveAuditPlan(ap) {
     region:ap.region||'', pays:JSON.stringify(ap.pays||[]),
     date_debut:ap.dateDebut||'', date_fin:ap.dateFin||'',
     step_num:ap.step!==undefined?ap.step:null, Title:ap.titre,
+    categorie:ap.categorie||'', description:ap.description||'',
   });
 }
 
