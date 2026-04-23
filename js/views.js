@@ -382,11 +382,14 @@ V['dashboard']=()=>{
   if(typeof _dbStatut==='undefined') window._dbStatut='all';
 
   // Appliquer filtres
+  // Les missions "Other" ne sont PAS affichées dans le tableau principal
+  // (elles ont leur propre capsule dédiée)
   var filtered=AUDIT_PLAN.filter(function(a){
     var okY  = a.annee===_dbYear;
+    var okT  = a.type !== 'Other';
     var okA  = _dbAuditeur==='all'||(a.auditeurs||[]).includes(_dbAuditeur);
     var okS  = _dbStatut==='all'||(a.statut||'').startsWith(_dbStatut);
-    return okY&&okA&&okS;
+    return okY&&okT&&okA&&okS;
   });
 
   var yClosed  = filtered.filter(function(a){return (a.statut||'').startsWith('Clôturé');});
@@ -396,8 +399,11 @@ V['dashboard']=()=>{
   var closedPct= filtered.length?Math.round(yClosed.length/filtered.length*100):0;
 
   // Toutes les stats pour le graphique (pas filtrées par statut)
+  // IMPORTANT : exclure les missions "Other" du donut (réservé aux Audits Process/BU)
   var forChart=AUDIT_PLAN.filter(function(a){
-    return a.annee===_dbYear&&(_dbAuditeur==='all'||(a.auditeurs||[]).includes(_dbAuditeur));
+    return a.annee===_dbYear
+      && a.type !== 'Other'
+      && (_dbAuditeur==='all'||(a.auditeurs||[]).includes(_dbAuditeur));
   });
   var cClosed  = forChart.filter(function(a){return (a.statut||'').startsWith('Clôturé');}).length;
   var cInProg  = forChart.filter(function(a){return (a.statut||'').startsWith('En cours');}).length;
@@ -505,12 +511,52 @@ V['dashboard']=()=>{
   // ── Zone principale (droite) ──────────────────────────────
   html+='<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1rem;">';
 
-  // Graphique donut
-  html+='<div class="card" style="padding:1rem;">';
-  html+='<div style="font-size:13px;font-weight:600;margin-bottom:.75rem;">Répartition des audits '+_dbYear+'</div>';
-  html+='<div style="display:flex;align-items:center;gap:1.5rem;">';
-  html+='<canvas id="db-donut" width="140" height="140" style="flex-shrink:0;"></canvas>';
-  html+='<div style="display:flex;flex-direction:column;gap:7px;font-size:12px;">';
+  // ══════════════════════════════════════════════════════════════
+  //  3 CAPSULES : Donut audits | Pays audités | Autres missions
+  // ══════════════════════════════════════════════════════════════
+
+  // Préparer données Capsule 2 : Pays audités
+  // On prend tous les audits BU de l'année (filtrés par auditeur si applicable)
+  var buAudits = AUDIT_PLAN.filter(function(a){
+    return a.type==='BU' && a.annee===_dbYear
+      && (_dbAuditeur==='all'||(a.auditeurs||[]).includes(_dbAuditeur));
+  });
+  // Construire la liste : {pays, region, statut, titre}
+  var countryEntries = [];
+  buAudits.forEach(function(a){
+    (a.pays||[]).forEach(function(country){
+      countryEntries.push({
+        country: country,
+        region: a.region||'',
+        statut: a.statut||'Planifié',
+        titre: a.titre||'',
+        auditId: a.id,
+      });
+    });
+  });
+  // Trier alphabétiquement par pays
+  countryEntries.sort(function(a,b){
+    return (a.country||'').localeCompare(b.country||'', 'fr', {sensitivity:'base'});
+  });
+
+  // Préparer données Capsule 3 : Autres missions
+  var otherMissions = AUDIT_PLAN.filter(function(a){
+    return a.type==='Other' && a.annee===_dbYear
+      && (_dbAuditeur==='all'||(a.auditeurs||[]).includes(_dbAuditeur));
+  });
+  otherMissions.sort(function(a,b){
+    return (a.categorie||'').localeCompare(b.categorie||'', 'fr', {sensitivity:'base'});
+  });
+
+  // Construction HTML des 3 capsules
+  html += '<div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:1rem;">';
+
+  // ── CAPSULE 1 : Donut audits Process + BU ──
+  html += '<div class="card" style="padding:1rem;">';
+  html += '<div style="font-size:13px;font-weight:600;margin-bottom:.75rem;">Répartition des audits '+_dbYear+'</div>';
+  html += '<div style="display:flex;flex-direction:column;align-items:center;gap:.75rem;">';
+  html += '<canvas id="db-donut" width="120" height="120" style="flex-shrink:0;"></canvas>';
+  html += '<div style="display:flex;flex-direction:column;gap:5px;font-size:11px;width:100%;">';
   var chartItems=[
     {label:'Clôturés',val:cClosed,color:'#5DCAA5'},
     {label:'En cours',val:cInProg,color:'#AFA9EC'},
@@ -519,13 +565,57 @@ V['dashboard']=()=>{
   ];
   chartItems.forEach(function(ci){
     var pct2=cTotal?Math.round(ci.val/cTotal*100):0;
-    html+='<div style="display:flex;align-items:center;gap:7px;">'
-      +'<div style="width:10px;height:10px;border-radius:50%;background:'+ci.color+';flex-shrink:0;"></div>'
+    html+='<div style="display:flex;align-items:center;gap:6px;">'
+      +'<div style="width:9px;height:9px;border-radius:50%;background:'+ci.color+';flex-shrink:0;"></div>'
       +'<span style="color:var(--text-2);">'+ci.label+'</span>'
       +'<span style="font-weight:600;margin-left:auto;">'+ci.val+' <span style="font-weight:400;color:var(--text-3);">('+pct2+'%)</span></span>'
       +'</div>';
   });
-  html+='</div></div></div>';
+  html += '</div></div></div>';
+
+  // ── CAPSULE 2 : Pays audités ──
+  html += '<div class="card" style="padding:1rem;display:flex;flex-direction:column">';
+  html += '<div style="font-size:13px;font-weight:600;margin-bottom:.75rem;">🗺️ Pays audités '+_dbYear+' ('+countryEntries.length+')</div>';
+  if (countryEntries.length) {
+    html += '<div style="flex:1;max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:5px">';
+    countryEntries.forEach(function(ce){
+      var statBadge = badge(ce.statut);
+      html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--bg);border-radius:6px;font-size:11px;cursor:pointer" onclick="openAudit(\''+ce.auditId+'\')">'
+        + '<span style="font-weight:500;flex:1">'+ce.country+'</span>'
+        + '<span style="font-size:10px;color:var(--text-3)">'+ce.region+'</span>'
+        + statBadge
+        + '</div>';
+    });
+    html += '</div>';
+  } else {
+    html += '<div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--text-3);font-size:12px;padding:2rem 0">Aucun pays audité pour '+_dbYear+'</div>';
+  }
+  html += '</div>';
+
+  // ── CAPSULE 3 : Autres missions ──
+  html += '<div class="card" style="padding:1rem;display:flex;flex-direction:column">';
+  html += '<div style="font-size:13px;font-weight:600;margin-bottom:.75rem;">📋 Autres missions '+_dbYear+' ('+otherMissions.length+')</div>';
+  if (otherMissions.length) {
+    html += '<div style="flex:1;max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:5px">';
+    otherMissions.forEach(function(om){
+      var cat = om.categorie || 'Autre';
+      var colors = getOtherCategoryColors(cat);
+      var statBadge = badge(om.statut||'Planifié');
+      html += '<div style="padding:6px 8px;background:var(--bg);border-radius:6px;font-size:11px">'
+        + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">'
+          + '<span class="badge" style="background:'+colors.bg+';color:'+colors.color+';font-size:9px">'+cat+'</span>'
+          + statBadge
+        + '</div>'
+        + '<div style="font-weight:500;font-size:11px">'+om.titre+'</div>'
+        + '</div>';
+    });
+    html += '</div>';
+  } else {
+    html += '<div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--text-3);font-size:12px;padding:2rem 0;text-align:center">Aucune autre mission<br>pour '+_dbYear+'</div>';
+  }
+  html += '</div>';
+
+  html += '</div>'; // fin grid 3 capsules
 
   // Tableau des audits
   html+='<div>';
@@ -1047,7 +1137,7 @@ function renderPlanAuditTable(){
         detail = '<span style="font-size:11px"><strong style="color:'+colors.color+'">'+cat+'</strong>'+desc+'</span>';
         typeBadgeHtml = '<span class="badge" style="background:'+colors.bg+';color:'+colors.color+'">Autre</span>';
       } else {
-        detail = '<span style="font-size:11px"><strong>'+(ap.entite||'')+'</strong> · '+(ap.region||'')+' · '+(ap.pays||[]).join(', ')+'</span>';
+        detail = '<span style="font-size:11px"><strong>'+(ap.region||'')+'</strong> · '+(ap.pays||[]).join(', ')+'</span>';
         typeBadgeHtml = '<span class="badge bbu">BU</span>';
       }
       var avs=(ap.auditeurs||[]).map(function(id){return avEl(id,20);}).join('');
@@ -1105,7 +1195,7 @@ function auditModalBody(ap){
   }
 
   var h='';
-  h+='<div><label>Type de mission</label><select id="m-type" onchange="toggleAuditTypeFields(this.value)"><option value="Process"'+(type==='Process'?' selected':'')+'>Process Audit</option><option value="BU"'+(type==='BU'?' selected':'')+'>BU Audit</option><option value="Other"'+(type==='Other'?' selected':'')+'>🗂️ Autre mission (Sapin 2, URD, Comité...)</option></select></div>';
+  h+='<div><label>Type de mission</label><select id="m-type" onchange="toggleAuditTypeFields(this.value)"><option value="Process"'+(type==='Process'?' selected':'')+'>Process Audit</option><option value="BU"'+(type==='BU'?' selected':'')+'>BU Audit</option><option value="Other"'+(type==='Other'?' selected':'')+'>Autre mission</option></select></div>';
   h+='<div id="m-proc-fields" style="'+(type!=='Process'?'display:none':'')+'">';
   h+='<div><label>Processus couverts <span style="color:var(--red)">*</span></label>';
   h+='<div style="font-size:10px;color:var(--text-3);margin-bottom:5px">Cochez un ou plusieurs processus (multi-domaines autorisés)</div>';
@@ -1114,15 +1204,13 @@ function auditModalBody(ap){
     + '</div>';
   h+='<div id="m-proc-count" style="font-size:11px;color:var(--purple);margin-top:5px;font-weight:500"></div>';
   h+='</div></div>';
-  h+='<div id="m-bu-fields" style="'+(type!=='BU'?'display:none':'')+'"><div><label>Entité</label><select id="m-ent">';
-  var entNames=GROUP_STRUCTURE.map(function(e){return e.name;});
-  if(!entNames.length) entNames=['SBS','AXW','Groupe'];
-  entNames.forEach(function(e){h+='<option'+(ap&&ap.entite===e?' selected':'')+'>'+e+'</option>';});
-  h+='</select></div>';
+  h+='<div id="m-bu-fields" style="'+(type!=='BU'?'display:none':'')+'">';
   h+='<div><label>Région</label><select id="m-reg">';
   var allRegs=[];
   GROUP_STRUCTURE.forEach(function(e){e.regions.forEach(function(r){allRegs.push(r.name);});});
   if(!allRegs.length) allRegs=['Europe','AMEE','North America','APAC'];
+  // Dédupliquer
+  allRegs = [...new Set(allRegs)];
   allRegs.forEach(function(r){h+='<option'+(ap&&ap.region===r?' selected':'')+'>'+r+'</option>';});
   h+='</select></div>';
   h+='<div><label>Pays (séparés par des virgules)</label><input id="m-pays" placeholder="ex : Maroc, Tunisie" value="'+((ap&&ap.pays||[]).join(', '))+'"/></div></div>';
@@ -1145,7 +1233,9 @@ function auditModalBody(ap){
 
   h+='<div><label>Titre de la mission</label><input id="m-titre" placeholder="ex : BU Maroc 2025" value="'+((ap&&ap.titre)||'')+'"/></div>';
   h+='<div class="g2"><div><label>Année</label><select id="m-annee">';
-  [2025,2026,2027,2028].forEach(function(y){h+='<option'+(ap&&ap.annee===y?' selected':'')+'>'+y+'</option>';});
+  var YEARS_LIST = [];
+  for (var yr = 2020; yr <= 2035; yr++) YEARS_LIST.push(yr);
+  YEARS_LIST.forEach(function(y){h+='<option'+(ap&&ap.annee===y?' selected':'')+'>'+y+'</option>';});
   h+='</select></div><div><label>Statut</label><select id="m-statut">';
   ['Planifié','En cours','Clôturé'].forEach(function(s){h+='<option'+(ap&&ap.statut===s?' selected':'')+'>'+s+'</option>';});
   h+='</select></div></div>';
@@ -1300,7 +1390,7 @@ function collectAuditModal(){
       description: description,
     });
   } else {
-    return Object.assign({},base,{entite:document.getElementById('m-ent').value,region:document.getElementById('m-reg').value,pays:document.getElementById('m-pays').value.split(',').map(function(s){return s.trim();}).filter(Boolean)});
+    return Object.assign({},base,{region:document.getElementById('m-reg').value,pays:document.getElementById('m-pays').value.split(',').map(function(s){return s.trim();}).filter(Boolean)});
   }
 }
 function showAddAuditModal(){
