@@ -428,7 +428,6 @@ V['dashboard']=()=>{
     {v:'Clôturé',l:'Clôturé'},
     {v:'En cours',l:'En cours'},
     {v:'Planifié',l:'Planifié'},
-    {v:'En retard',l:'En retard'},
   ].map(function(o){
     return '<option value="'+o.v+'"'+(_dbStatut===o.v?' selected':'')+'>'+o.l+'</option>';
   }).join('');
@@ -458,58 +457,22 @@ V['dashboard']=()=>{
   }).join('')||'<div style="font-size:12px;color:var(--text-3);padding:.5rem">Aucun plan urgent</div>';
 
   var html='';
-  html+='<div class="topbar"><div class="tbtitle">Tableau de bord — '+_dbYear+'</div>';
+  html+='<div class="topbar">';
+  html+='<div class="tbtitle">Tableau de bord — '+_dbYear+'</div>';
+  // ── Filtres en ligne, au centre de la topbar ──
+  html+='<div style="display:flex;gap:8px;align-items:center;flex:1;justify-content:center">';
+  html+='<select class="f-inp" style="font-size:12px;height:30px;padding:0 8px;min-width:90px" onchange="dbSetYear(parseInt(this.value))" title="Année">'+yearOpts+'</select>';
+  html+='<select class="f-inp" style="font-size:12px;height:30px;padding:0 8px;min-width:120px" onchange="dbSetAuditeur(this.value)" title="Auditeur">'+audOpts+'</select>';
+  html+='<select class="f-inp" style="font-size:12px;height:30px;padding:0 8px;min-width:120px" onchange="dbSetStatut(this.value)" title="Statut">'+statOpts+'</select>';
+  html+='</div>';
   html+='<div style="display:flex;gap:7px;">'
     +'<button class="bs" onclick="exportDashboardPDF()" style="font-size:11px;">⬇ Export PDF</button>'
     +'<button class="bp" onclick="nav(\'plan-audit\')">+ Nouvel audit</button>'
-    +'</div></div>';
-  html+='<div class="content" style="display:flex;gap:1rem;align-items:flex-start">';
-
-  // ── Colonne de filtres (gauche) ───────────────────────────
-  html+='<div style="width:180px;flex-shrink:0;display:flex;flex-direction:column;gap:10px;">';
-  html+='<div class="card" style="padding:.875rem;">';
-  html+='<div style="font-size:11px;font-weight:600;color:var(--text-2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Filtres</div>';
-
-  html+='<div style="margin-bottom:8px;">';
-  html+='<label style="font-size:10px;color:var(--text-3);display:block;margin-bottom:3px;">Année</label>';
-  html+='<select class="f-inp" style="width:100%;font-size:12px;height:30px;padding:0 8px;" onchange="dbSetYear(parseInt(this.value))">'+yearOpts+'</select>';
+    +'</div>';
   html+='</div>';
 
-  html+='<div style="margin-bottom:8px;">';
-  html+='<label style="font-size:10px;color:var(--text-3);display:block;margin-bottom:3px;">Auditeur</label>';
-  html+='<select class="f-inp" style="width:100%;font-size:12px;height:30px;padding:0 8px;" onchange="dbSetAuditeur(this.value)">'+audOpts+'</select>';
-  html+='</div>';
-
-  html+='<div>';
-  html+='<label style="font-size:10px;color:var(--text-3);display:block;margin-bottom:3px;">Statut</label>';
-  html+='<select class="f-inp" style="width:100%;font-size:12px;height:30px;padding:0 8px;" onchange="dbSetStatut(this.value)">'+statOpts+'</select>';
-  html+='</div>';
-  html+='</div>';
-
-  // ── Métriques cliquables ──────────────────────────────────
-  html+='<div style="display:flex;flex-direction:column;gap:7px;margin-top:0;">';
-  var metrics=[
-    {label:'Total '+_dbYear,val:forChart.length,color:'var(--text)',statut:'all'},
-    {label:'Clôturés',val:cClosed,color:'var(--green)',statut:'Clôturé'},
-    {label:'En cours',val:cInProg,color:'var(--purple)',statut:'En cours'},
-    {label:'Planifiés',val:cPlanned,color:'var(--amber)',statut:'Planifié'},
-    {label:'En retard',val:cLate,color:'var(--red)',statut:'En retard'},
-  ];
-  metrics.forEach(function(m){
-    var active=_dbStatut===m.statut;
-    html+='<div onclick="dbSetStatut(\''+m.statut+'\')" style="cursor:pointer;padding:.625rem .875rem;'
-      +'background:'+(active?'var(--purple-lt)':'var(--white)')+';'
-      +'border:.5px solid '+(active?'var(--purple)':'var(--border)')+';'
-      +'border-radius:var(--radius);transition:all .15s;">'
-      +'<div style="font-size:10px;color:var(--text-2);margin-bottom:2px;">'+m.label+'</div>'
-      +'<div style="font-size:20px;font-weight:600;color:'+m.color+';">'+m.val+'</div>'
-      +'</div>';
-  });
-  html+='</div>';
-  html+='</div>';
-
-  // ── Zone principale (droite) ──────────────────────────────
-  html+='<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1rem;">';
+  // Content en colonne (plus de colonne gauche)
+  html+='<div class="content" style="display:flex;flex-direction:column;gap:1rem;">';
 
   // ══════════════════════════════════════════════════════════════
   //  3 CAPSULES : Donut audits | Pays audités | Autres missions
@@ -551,31 +514,30 @@ V['dashboard']=()=>{
   // Construction HTML des 3 capsules
   html += '<div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:1rem;">';
 
-  // ── CAPSULE 1 : Donut audits Process + BU ──
+  // ── CAPSULE 1 : Process + BU Audits (donut) ──
   html += '<div class="card" style="padding:1rem;">';
-  html += '<div style="font-size:13px;font-weight:600;margin-bottom:.75rem;">Répartition des audits '+_dbYear+'</div>';
-  html += '<div style="display:flex;flex-direction:column;align-items:center;gap:.75rem;">';
-  html += '<canvas id="db-donut" width="120" height="120" style="flex-shrink:0;"></canvas>';
-  html += '<div style="display:flex;flex-direction:column;gap:5px;font-size:11px;width:100%;">';
+  html += '<div style="font-size:13px;font-weight:600;margin-bottom:.5rem;">Process Audits '+_dbYear+'</div>';
+  html += '<div style="display:flex;align-items:center;gap:.875rem;">';
+  html += '<canvas id="db-donut" width="90" height="90" style="flex-shrink:0;"></canvas>';
+  html += '<div style="display:flex;flex-direction:column;gap:4px;font-size:11px;flex:1;min-width:0;">';
   var chartItems=[
     {label:'Clôturés',val:cClosed,color:'#5DCAA5'},
     {label:'En cours',val:cInProg,color:'#AFA9EC'},
     {label:'Planifiés',val:cPlanned,color:'#EF9F27'},
-    {label:'En retard',val:cLate,color:'#F0997B'},
   ];
   chartItems.forEach(function(ci){
     var pct2=cTotal?Math.round(ci.val/cTotal*100):0;
-    html+='<div style="display:flex;align-items:center;gap:6px;">'
-      +'<div style="width:9px;height:9px;border-radius:50%;background:'+ci.color+';flex-shrink:0;"></div>'
-      +'<span style="color:var(--text-2);">'+ci.label+'</span>'
-      +'<span style="font-weight:600;margin-left:auto;">'+ci.val+' <span style="font-weight:400;color:var(--text-3);">('+pct2+'%)</span></span>'
+    html+='<div style="display:flex;align-items:center;gap:5px;">'
+      +'<div style="width:8px;height:8px;border-radius:50%;background:'+ci.color+';flex-shrink:0;"></div>'
+      +'<span style="color:var(--text-2);font-size:10px;">'+ci.label+'</span>'
+      +'<span style="font-weight:600;margin-left:auto;font-size:11px;white-space:nowrap;">'+ci.val+' <span style="font-weight:400;color:var(--text-3);">('+pct2+'%)</span></span>'
       +'</div>';
   });
   html += '</div></div></div>';
 
-  // ── CAPSULE 2 : Pays audités ──
+  // ── CAPSULE 2 : BU Audits ──
   html += '<div class="card" style="padding:1rem;display:flex;flex-direction:column">';
-  html += '<div style="font-size:13px;font-weight:600;margin-bottom:.75rem;">🗺️ Pays audités '+_dbYear+' ('+countryEntries.length+')</div>';
+  html += '<div style="font-size:13px;font-weight:600;margin-bottom:.5rem;">BU Audits '+_dbYear+' ('+countryEntries.length+')</div>';
   if (countryEntries.length) {
     html += '<div style="flex:1;max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:5px">';
     countryEntries.forEach(function(ce){
@@ -594,7 +556,7 @@ V['dashboard']=()=>{
 
   // ── CAPSULE 3 : Autres missions ──
   html += '<div class="card" style="padding:1rem;display:flex;flex-direction:column">';
-  html += '<div style="font-size:13px;font-weight:600;margin-bottom:.75rem;">📋 Autres missions '+_dbYear+' ('+otherMissions.length+')</div>';
+  html += '<div style="font-size:13px;font-weight:600;margin-bottom:.5rem;">Autres missions '+_dbYear+' ('+otherMissions.length+')</div>';
   if (otherMissions.length) {
     html += '<div style="flex:1;max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:5px">';
     otherMissions.forEach(function(om){
@@ -632,7 +594,6 @@ V['dashboard']=()=>{
   html+='<div>'+lateRows+'</div>';
   html+='</div>';
 
-  html+='</div>'; // fin zone principale
   html+='</div>'; // fin content
   return html;
 };
@@ -664,25 +625,25 @@ I['dashboard']=function(){
     if(!canvas) return;
     var CY=window._dbYear||2026;
     var DA=window._dbAuditeur||'all';
+    // Exclure les missions "Other" (même logique que le calcul dans la vue)
     var forChart=AUDIT_PLAN.filter(function(a){
-      return a.annee===CY&&(DA==='all'||(a.auditeurs||[]).includes(DA));
+      return a.annee===CY && a.type !== 'Other'
+        && (DA==='all'||(a.auditeurs||[]).includes(DA));
     });
     var cClosed  = forChart.filter(function(a){return (a.statut||'').startsWith('Clôturé');}).length;
     var cInProg  = forChart.filter(function(a){return (a.statut||'').startsWith('En cours');}).length;
     var cPlanned = forChart.filter(function(a){return (a.statut||'').startsWith('Planifié');}).length;
-    var cLate    = forChart.filter(function(a){return (a.statut||'').startsWith('En retard');}).length;
-    var total    = cClosed+cInProg+cPlanned+cLate;
+    var total    = cClosed+cInProg+cPlanned;
     if(!total) return;
     var segments=[
       {val:cClosed, color:'#5DCAA5'},
       {val:cInProg, color:'#AFA9EC'},
       {val:cPlanned,color:'#EF9F27'},
-      {val:cLate,   color:'#F0997B'},
     ];
     var ctx=canvas.getContext('2d');
-    var cx=70,cy=70,r=60,inner=38;
+    var W=90, cx=W/2, cy=W/2, r=42, inner=26;
     var start=-Math.PI/2;
-    ctx.clearRect(0,0,140,140);
+    ctx.clearRect(0,0,W,W);
     segments.forEach(function(s){
       if(!s.val) return;
       var slice=2*Math.PI*(s.val/total);
@@ -701,13 +662,13 @@ I['dashboard']=function(){
     ctx.fill();
     // Texte central
     ctx.fillStyle='#1A1A18';
-    ctx.font='600 20px -apple-system,system-ui,sans-serif';
+    ctx.font='600 15px -apple-system,system-ui,sans-serif';
     ctx.textAlign='center';
     ctx.textBaseline='middle';
-    ctx.fillText(total,cx,cy-8);
-    ctx.font='11px -apple-system,system-ui,sans-serif';
+    ctx.fillText(total,cx,cy-5);
+    ctx.font='9px -apple-system,system-ui,sans-serif';
     ctx.fillStyle='#9C9A92';
-    ctx.fillText('audits',cx,cy+10);
+    ctx.fillText('audits',cx,cy+8);
   },60);
 };
 
