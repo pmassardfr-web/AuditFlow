@@ -2028,6 +2028,470 @@ async function deleteAction(id){
 }
 
 // ══════════════════════════════════════════════════════════════
+//  RISK UNIVERSE : hiérarchie des risques Groupe / Opérationnels
+// ══════════════════════════════════════════════════════════════
+
+V['risk-universe']=()=>`
+  <div class="topbar">
+    <div class="tbtitle">Risk Universe</div>
+    <div style="display:flex;gap:7px">
+      <button class="bs" onclick="ruShowMatrix()" style="font-size:11px">📊 Matrice de synthèse</button>
+      <button class="bp ao" onclick="ruAddGroupRisk()">+ Risque Groupe (URD)</button>
+    </div>
+  </div>
+  <div class="content">
+    <div id="ru-root"></div>
+  </div>`;
+
+I['risk-universe']=function(){
+  ruRender();
+};
+
+function ruRender(){
+  var root=document.getElementById('ru-root');
+  if(!root) return;
+
+  // Séparer les risques groupe (URD) des opérationnels
+  var groupRisks = RISK_UNIVERSE.filter(function(r){return r.level==='group';});
+  groupRisks.sort(function(a,b){return (a.title||'').localeCompare(b.title||'','fr',{sensitivity:'base'});});
+
+  if (!groupRisks.length) {
+    root.innerHTML = '<div style="font-size:13px;color:var(--text-3);padding:2rem;text-align:center">'
+      + '<div style="font-size:36px;margin-bottom:8px">△</div>'
+      + '<div style="font-weight:500;margin-bottom:4px">Aucun risque défini</div>'
+      + '<div>Commencez par créer un risque Groupe (URD). Les risques opérationnels y seront rattachés.</div>'
+      + '</div>';
+    return;
+  }
+
+  var html = '<div style="display:flex;flex-direction:column;gap:12px">';
+  groupRisks.forEach(function(gr){
+    var operationalRisks = RISK_UNIVERSE.filter(function(r){return r.level==='operational' && r.parentId===gr.id;});
+    operationalRisks.sort(function(a,b){return (a.title||'').localeCompare(b.title||'','fr',{sensitivity:'base'});});
+
+    var impactColors = (typeof RISK_IMPACT_COLORS!=='undefined' && RISK_IMPACT_COLORS[gr.impact])
+      ? RISK_IMPACT_COLORS[gr.impact]
+      : {bg:'#F3F4F6', color:'#374151'};
+
+    var typeBadges = (gr.impactTypes||[]).map(function(t){
+      return '<span class="badge bpl" style="font-size:9px">'+t+'</span>';
+    }).join(' ');
+
+    // En-tête du risque groupe
+    html += '<div class="card" style="padding:0;overflow:hidden">';
+    html += '<div style="padding:12px 14px;border-left:4px solid '+impactColors.color+';background:'+impactColors.bg+'22">';
+    html += '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px">';
+    html += '<div style="flex:1">';
+    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">';
+    html += '<span style="font-size:10px;font-weight:700;color:var(--purple-dk);letter-spacing:.05em">URD</span>';
+    html += '<span style="font-size:15px;font-weight:600">'+gr.title+'</span>';
+    html += '</div>';
+    if (gr.description) html += '<div style="font-size:11px;color:var(--text-2);margin-bottom:6px">'+gr.description+'</div>';
+    html += '<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-top:6px">';
+    if (gr.probability) html += '<span class="badge bpl" style="font-size:10px">Prob: '+gr.probability+'</span>';
+    if (gr.impact) html += '<span class="badge" style="background:'+impactColors.bg+';color:'+impactColors.color+';font-size:10px;font-weight:600">Impact: '+gr.impact+'</span>';
+    html += typeBadges;
+    html += '</div></div>';
+    // Boutons d'action
+    html += '<div style="display:flex;gap:4px;flex-shrink:0">';
+    if (CU && CU.role==='admin') {
+      html += '<button class="bs" style="font-size:10px;padding:2px 8px" onclick="ruAddOperationalRisk(\''+gr.id+'\')">+ Op.</button>';
+      html += '<button class="bs" style="font-size:10px;padding:2px 8px" onclick="ruEditGroupRisk(\''+gr.id+'\')">Éditer</button>';
+      html += '<button class="bd" style="font-size:10px;padding:2px 6px" onclick="ruDeleteGroupRisk(\''+gr.id+'\')">×</button>';
+    }
+    html += '</div></div></div>';
+
+    // Liste des risques opérationnels
+    if (operationalRisks.length) {
+      html += '<div style="padding:8px 14px;background:var(--bg)">';
+      html += '<div style="font-size:10px;color:var(--text-3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Risques opérationnels ('+operationalRisks.length+')</div>';
+      operationalRisks.forEach(function(or){
+        html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:var(--bg-card);border-radius:6px;margin-bottom:4px;font-size:11px">';
+        html += '<div style="flex:1">';
+        html += '<div style="font-weight:500">'+or.title+'</div>';
+        if (or.description) html += '<div style="font-size:10px;color:var(--text-3);margin-top:2px">'+or.description+'</div>';
+        html += '</div>';
+        html += '<div style="display:flex;gap:4px;margin-left:10px">';
+        html += '<span class="badge" style="background:'+impactColors.bg+';color:'+impactColors.color+';font-size:9px">Hérite '+(gr.impact||'—')+'</span>';
+        if (CU && CU.role==='admin') {
+          html += '<button class="bs" style="font-size:10px;padding:1px 6px" onclick="ruEditOperationalRisk(\''+or.id+'\')">Éditer</button>';
+          html += '<button class="bd" style="font-size:10px;padding:1px 5px" onclick="ruDeleteOperationalRisk(\''+or.id+'\')">×</button>';
+        }
+        html += '</div></div>';
+      });
+      html += '</div>';
+    } else {
+      html += '<div style="padding:8px 14px;font-size:10px;color:var(--text-3);font-style:italic;background:var(--bg)">Aucun risque opérationnel rattaché</div>';
+    }
+    html += '</div>';
+  });
+  html += '</div>';
+  root.innerHTML = html;
+}
+
+// ── Formulaire Risque Groupe (URD) ──────────────────────────
+function ruGroupRiskModal(existingRisk) {
+  var probOpts = (typeof RISK_PROBABILITIES!=='undefined' ? RISK_PROBABILITIES : ['Rare','Unlikely','Possible','Certain'])
+    .map(function(p){return '<option value="'+p+'"'+(existingRisk && existingRisk.probability===p?' selected':'')+'>'+p+'</option>';}).join('');
+  var impactOpts = (typeof RISK_IMPACTS!=='undefined' ? RISK_IMPACTS : ['Minor','Limited','Major','Severe'])
+    .map(function(i){return '<option value="'+i+'"'+(existingRisk && existingRisk.impact===i?' selected':'')+'>'+i+'</option>';}).join('');
+  var types = typeof RISK_IMPACT_TYPES!=='undefined' ? RISK_IMPACT_TYPES : ['Réputation','Financier','Legal','Operations'];
+  var currentTypes = (existingRisk && existingRisk.impactTypes) || [];
+  var typesHtml = types.map(function(t){
+    var checked = currentTypes.indexOf(t)>=0 ? ' checked' : '';
+    return '<label><input type="checkbox" class="ru-type-cb" value="'+t+'"'+checked+'><span>'+t+'</span></label>';
+  }).join('');
+
+  var body = '<div><label>Intitulé du risque <span style="color:var(--red)">*</span></label><input id="ru-title" value="'+((existingRisk&&existingRisk.title)||'')+'" placeholder="ex: Cyber Security"/></div>'
+    + '<div><label>Description</label><textarea id="ru-desc" style="width:100%;min-height:50px" placeholder="Description détaillée du risque">'+((existingRisk&&existingRisk.description)||'')+'</textarea></div>'
+    + '<div class="g2">'
+      + '<div><label>Probabilité <span style="color:var(--red)">*</span></label><select id="ru-prob"><option value="">—</option>'+probOpts+'</select></div>'
+      + '<div><label>Impact <span style="color:var(--red)">*</span></label><select id="ru-impact"><option value="">—</option>'+impactOpts+'</select></div>'
+    + '</div>'
+    + '<div><label>Types d\'impact (1 ou plusieurs)</label>'
+      + '<div class="cb-list" style="display:flex;flex-wrap:wrap;gap:6px">'+typesHtml+'</div>'
+    + '</div>';
+
+  openModal(existingRisk ? 'Éditer risque Groupe (URD)' : 'Nouveau risque Groupe (URD)', body, async function(){
+    var title = document.getElementById('ru-title').value.trim();
+    if (!title) { toast('Titre obligatoire'); return; }
+    var prob = document.getElementById('ru-prob').value;
+    var impact = document.getElementById('ru-impact').value;
+    if (!prob || !impact) { toast('Probabilité et Impact obligatoires'); return; }
+    var desc = document.getElementById('ru-desc').value.trim();
+    var impactTypes = [];
+    document.querySelectorAll('.ru-type-cb:checked').forEach(function(cb){ impactTypes.push(cb.value); });
+
+    if (existingRisk) {
+      existingRisk.title = title;
+      existingRisk.description = desc;
+      existingRisk.probability = prob;
+      existingRisk.impact = impact;
+      existingRisk.impactTypes = impactTypes;
+      await ruSaveRisk(existingRisk);
+      addHist('edit', 'Risque URD "'+title+'" modifié');
+      // Propagation : les opérationnels héritent auto du niveau (pas de champ à update côté code)
+      toast('Risque modifié ✓');
+    } else {
+      var newRisk = {
+        id: 'rsk_'+Date.now(),
+        level: 'group',
+        parentId: '',
+        title: title, description: desc,
+        probability: prob, impact: impact, impactTypes: impactTypes,
+      };
+      RISK_UNIVERSE.push(newRisk);
+      await ruSaveRisk(newRisk);
+      addHist('add', 'Risque URD "'+title+'" créé');
+      toast('Risque créé ✓');
+    }
+    ruRender();
+  });
+}
+
+function ruAddGroupRisk(){ ruGroupRiskModal(null); }
+function ruEditGroupRisk(rId){
+  var r = RISK_UNIVERSE.find(function(x){return x.id===rId;});
+  if (!r) return;
+  ruGroupRiskModal(r);
+}
+
+async function ruDeleteGroupRisk(rId){
+  var r = RISK_UNIVERSE.find(function(x){return x.id===rId;});
+  if (!r) return;
+  var children = RISK_UNIVERSE.filter(function(x){return x.parentId===rId;});
+  if (!confirm('Supprimer le risque URD "'+r.title+'"'+(children.length?' et ses '+children.length+' risque(s) opérationnel(s) rattaché(s)':'')+' ?')) return;
+  // Supprimer les enfants d'abord
+  for (var i=0; i<children.length; i++) {
+    await spDelete('AF_RiskUniverse', children[i].id);
+  }
+  await spDelete('AF_RiskUniverse', rId);
+  RISK_UNIVERSE = RISK_UNIVERSE.filter(function(x){return x.id!==rId && x.parentId!==rId;});
+  addHist('del', 'Risque URD "'+r.title+'" supprimé');
+  ruRender();
+  toast('Risque supprimé ✓');
+}
+
+// ── Formulaire Risque Opérationnel ──────────────────────────
+function ruOperationalRiskModal(parentId, existingRisk) {
+  var parent = RISK_UNIVERSE.find(function(x){return x.id===parentId;});
+  var parentInfo = parent
+    ? '<div style="padding:8px 10px;background:var(--bg);border-radius:6px;margin-bottom:10px;font-size:11px">'
+      + '<div style="color:var(--text-3);margin-bottom:2px">Rattaché au risque URD :</div>'
+      + '<div style="font-weight:500">'+parent.title+'</div>'
+      + '<div style="color:var(--text-3);margin-top:4px">Niveau hérité : <strong>'+(parent.impact||'—')+'</strong> · Prob: '+(parent.probability||'—')+'</div>'
+      + '</div>'
+    : '';
+
+  var body = parentInfo
+    + '<div><label>Intitulé du risque opérationnel <span style="color:var(--red)">*</span></label><input id="ru-title" value="'+((existingRisk&&existingRisk.title)||'')+'" placeholder="ex: Phishing employés"/></div>'
+    + '<div><label>Description</label><textarea id="ru-desc" style="width:100%;min-height:50px" placeholder="Description détaillée">'+((existingRisk&&existingRisk.description)||'')+'</textarea></div>';
+
+  openModal(existingRisk ? 'Éditer risque opérationnel' : 'Nouveau risque opérationnel', body, async function(){
+    var title = document.getElementById('ru-title').value.trim();
+    if (!title) { toast('Titre obligatoire'); return; }
+    var desc = document.getElementById('ru-desc').value.trim();
+
+    if (existingRisk) {
+      existingRisk.title = title;
+      existingRisk.description = desc;
+      await ruSaveRisk(existingRisk);
+      addHist('edit', 'Risque opérationnel "'+title+'" modifié');
+      toast('Risque modifié ✓');
+    } else {
+      var newRisk = {
+        id: 'rsk_'+Date.now(),
+        level: 'operational',
+        parentId: parentId,
+        title: title, description: desc,
+        probability: '', impact: '', impactTypes: [],  // hérite du parent
+      };
+      RISK_UNIVERSE.push(newRisk);
+      await ruSaveRisk(newRisk);
+      addHist('add', 'Risque opérationnel "'+title+'" créé');
+      toast('Risque créé ✓');
+    }
+    ruRender();
+  });
+}
+
+function ruAddOperationalRisk(parentId){ ruOperationalRiskModal(parentId, null); }
+function ruEditOperationalRisk(rId){
+  var r = RISK_UNIVERSE.find(function(x){return x.id===rId;});
+  if (!r) return;
+  ruOperationalRiskModal(r.parentId, r);
+}
+
+async function ruDeleteOperationalRisk(rId){
+  var r = RISK_UNIVERSE.find(function(x){return x.id===rId;});
+  if (!r) return;
+  if (!confirm('Supprimer le risque opérationnel "'+r.title+'" ?')) return;
+  await spDelete('AF_RiskUniverse', rId);
+  RISK_UNIVERSE = RISK_UNIVERSE.filter(function(x){return x.id!==rId;});
+  addHist('del', 'Risque opérationnel "'+r.title+'" supprimé');
+  ruRender();
+  toast('Risque supprimé ✓');
+}
+
+async function ruSaveRisk(risk) {
+  try {
+    await spUpsert('AF_RiskUniverse', risk.id, {
+      level: risk.level,
+      parent_id: risk.parentId || '',
+      title: risk.title,
+      description: risk.description || '',
+      probability: risk.probability || '',
+      impact: risk.impact || '',
+      impact_types_json: JSON.stringify(risk.impactTypes||[]),
+      Title: risk.title,
+    });
+  } catch(e){ console.warn('[RU] save error:', e.message); toast('Erreur sauvegarde: '+e.message); }
+}
+
+// Matrice 4x4 probabilité × impact
+function ruShowMatrix() {
+  var probs = typeof RISK_PROBABILITIES!=='undefined' ? RISK_PROBABILITIES : ['Rare','Unlikely','Possible','Certain'];
+  var impacts = typeof RISK_IMPACTS!=='undefined' ? RISK_IMPACTS : ['Minor','Limited','Major','Severe'];
+  var groupRisks = RISK_UNIVERSE.filter(function(r){return r.level==='group';});
+
+  // Grouper les risques par (proba, impact)
+  var cells = {};
+  groupRisks.forEach(function(r){
+    var key = r.probability + '__' + r.impact;
+    if (!cells[key]) cells[key] = [];
+    cells[key].push(r);
+  });
+
+  // Construire tableau
+  var html = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px">';
+  html += '<thead><tr><th style="padding:8px;background:var(--bg);border:.5px solid var(--border)"></th>';
+  impacts.forEach(function(imp){
+    var col = (typeof RISK_IMPACT_COLORS!=='undefined' && RISK_IMPACT_COLORS[imp]) ? RISK_IMPACT_COLORS[imp] : {bg:'#F3F4F6',color:'#374151'};
+    html += '<th style="padding:8px;background:'+col.bg+';color:'+col.color+';border:.5px solid var(--border);font-size:11px">'+imp+'</th>';
+  });
+  html += '</tr></thead><tbody>';
+  // Inverser ordre des probabilités pour avoir Certain en haut
+  probs.slice().reverse().forEach(function(prob){
+    html += '<tr>';
+    html += '<td style="padding:8px;font-weight:600;background:var(--bg);border:.5px solid var(--border)">'+prob+'</td>';
+    impacts.forEach(function(imp){
+      var risks = cells[prob+'__'+imp] || [];
+      var col = (typeof RISK_IMPACT_COLORS!=='undefined' && RISK_IMPACT_COLORS[imp]) ? RISK_IMPACT_COLORS[imp] : {bg:'#F3F4F6',color:'#374151'};
+      if (risks.length) {
+        var content = risks.map(function(r){return '<div style="font-size:10px;padding:2px 4px;background:'+col.bg+';color:'+col.color+';border-radius:3px;margin-bottom:2px">'+r.title+'</div>';}).join('');
+        html += '<td style="padding:6px;border:.5px solid var(--border);vertical-align:top">'+content+'</td>';
+      } else {
+        html += '<td style="padding:8px;border:.5px solid var(--border);color:var(--text-3);text-align:center">—</td>';
+      }
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  html += '<div style="font-size:10px;color:var(--text-3);margin-top:10px;font-style:italic">Seuls les risques Groupe (URD) apparaissent dans la matrice. Les risques opérationnels héritent du niveau de leur parent.</div>';
+
+  openModal('Matrice des risques URD', html, function(){});
+}
+
+// ══════════════════════════════════════════════════════════════
+//  PRODUCT LINES (squelette - phase D)
+// ══════════════════════════════════════════════════════════════
+V['product-lines']=()=>`
+  <div class="topbar">
+    <div class="tbtitle">Product Lines</div>
+    <div style="display:flex;gap:7px">
+      <button class="bp ao" onclick="plAddProductLine()">+ Product Line</button>
+    </div>
+  </div>
+  <div class="content">
+    <div id="pl-root"></div>
+  </div>`;
+
+I['product-lines']=function(){
+  plRender();
+};
+
+function plRender(){
+  var root=document.getElementById('pl-root');
+  if(!root) return;
+
+  if (!PRODUCT_LINES || !PRODUCT_LINES.length) {
+    root.innerHTML = '<div style="font-size:13px;color:var(--text-3);padding:2rem;text-align:center">'
+      + '<div style="font-size:36px;margin-bottom:8px">▲</div>'
+      + '<div style="font-weight:500;margin-bottom:4px">Aucune Product Line définie</div>'
+      + '<div>Cliquez sur "+ Product Line" pour commencer.</div>'
+      + '</div>';
+    return;
+  }
+
+  // Grouper par société
+  var bySociety = { SBS:[], AXW:[], Autre:[] };
+  PRODUCT_LINES.forEach(function(pl){
+    var soc = (pl.society==='SBS' || pl.society==='AXW') ? pl.society : 'Autre';
+    bySociety[soc].push(pl);
+  });
+
+  var html = '';
+  ['SBS','AXW','Autre'].forEach(function(soc){
+    var list = bySociety[soc];
+    if (!list.length) return;
+    list.sort(function(a,b){return (a.name||'').localeCompare(b.name||'','fr',{sensitivity:'base'});});
+    html += '<div style="margin-bottom:1.5rem">';
+    html += '<div style="font-size:11px;font-weight:700;color:var(--purple-dk);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.5rem;padding-bottom:4px;border-bottom:1px solid var(--border)">'+soc+' ('+list.length+')</div>';
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">';
+    list.forEach(function(pl){
+      var countries = pl.countries || [];
+      var countriesHtml = countries.length
+        ? countries.map(function(c){return '<span class="badge bpl" style="font-size:9px;padding:2px 6px">'+c+'</span>';}).join(' ')
+        : '<span style="font-size:10px;color:var(--text-3);font-style:italic">Aucun pays</span>';
+      html += '<div class="card" style="padding:12px 14px">'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'
+          + '<div style="font-size:13px;font-weight:600">'+pl.name+'</div>'
+          + '<div style="display:flex;gap:4px">'
+            + (CU&&CU.role==='admin'?'<button class="bs" style="font-size:10px;padding:2px 6px" onclick="plEditProductLine(\''+pl.id+'\')">Éditer</button>':'')
+            + (CU&&CU.role==='admin'?'<button class="bd" style="font-size:10px;padding:2px 6px" onclick="plDeleteProductLine(\''+pl.id+'\')">×</button>':'')
+          + '</div>'
+        + '</div>'
+        + (pl.description ? '<div style="font-size:11px;color:var(--text-2);margin-bottom:8px">'+pl.description+'</div>' : '')
+        + '<div style="font-size:10px;color:var(--text-3);margin-bottom:4px">Pays ('+countries.length+')</div>'
+        + '<div style="display:flex;flex-wrap:wrap;gap:3px">'+countriesHtml+'</div>'
+        + '</div>';
+    });
+    html += '</div></div>';
+  });
+  root.innerHTML = html;
+}
+
+function plProductLineModal(existingPL) {
+  // Pays disponibles depuis Group Structure
+  var availableCountries = (typeof getAllCountriesFromGS==='function') ? getAllCountriesFromGS() : [];
+  var currentCountries = (existingPL && existingPL.countries) || [];
+
+  var countriesHtml = '';
+  if (availableCountries.length) {
+    countriesHtml = availableCountries.map(function(c){
+      var checked = currentCountries.indexOf(c)>=0 ? ' checked' : '';
+      return '<label><input type="checkbox" class="pl-country-cb" value="'+c+'"'+checked+'><span>'+c+'</span></label>';
+    }).join('');
+    countriesHtml = '<div><label>Pays de déploiement</label>'
+      + '<div style="font-size:10px;color:var(--text-3);margin-bottom:5px">Cochez les pays où cette Product Line est présente (depuis Group Structure)</div>'
+      + '<div class="cb-list" style="display:flex;flex-direction:column;gap:3px;max-height:200px;overflow-y:auto;border:.5px solid var(--border);border-radius:var(--radius);padding:8px 10px;background:var(--bg-card)">'
+      + countriesHtml
+      + '</div></div>';
+  } else {
+    countriesHtml = '<div style="font-size:11px;color:var(--text-3);padding:8px;background:var(--bg);border-radius:6px">ℹ️ Aucun pays dans Group Structure. Définissez-en d\'abord pour pouvoir associer des pays à cette Product Line.</div>';
+  }
+
+  var body = '<div><label>Nom de la Product Line <span style="color:var(--red)">*</span></label><input id="pl-name" value="'+((existingPL&&existingPL.name)||'')+'" placeholder="ex: API Management"/></div>'
+    + '<div><label>Société <span style="color:var(--red)">*</span></label>'
+    + '<select id="pl-society">'
+      + '<option value="SBS"'+(existingPL && existingPL.society==='SBS'?' selected':'')+'>SBS</option>'
+      + '<option value="AXW"'+(existingPL && existingPL.society==='AXW'?' selected':'')+'>AXW</option>'
+    + '</select></div>'
+    + '<div><label>Description</label><textarea id="pl-desc" style="width:100%;min-height:50px" placeholder="Description de la Product Line">'+((existingPL&&existingPL.description)||'')+'</textarea></div>'
+    + countriesHtml;
+
+  openModal(existingPL ? 'Éditer Product Line' : 'Nouvelle Product Line', body, async function(){
+    var name = document.getElementById('pl-name').value.trim();
+    if (!name) { toast('Nom obligatoire'); return; }
+    var society = document.getElementById('pl-society').value;
+    var description = document.getElementById('pl-desc').value.trim();
+    var countries = [];
+    document.querySelectorAll('.pl-country-cb:checked').forEach(function(cb){ countries.push(cb.value); });
+
+    if (existingPL) {
+      existingPL.name = name;
+      existingPL.society = society;
+      existingPL.description = description;
+      existingPL.countries = countries;
+      await plSavePL(existingPL);
+      addHist('edit', 'Product Line "'+name+'" modifiée');
+      toast('Product Line modifiée ✓');
+    } else {
+      var newPL = {
+        id: 'pl_'+Date.now(),
+        name: name, society: society,
+        description: description, countries: countries,
+      };
+      PRODUCT_LINES.push(newPL);
+      await plSavePL(newPL);
+      addHist('add', 'Product Line "'+name+'" créée');
+      toast('Product Line créée ✓');
+    }
+    plRender();
+  });
+}
+
+function plAddProductLine(){ plProductLineModal(null); }
+function plEditProductLine(plId){
+  var pl = PRODUCT_LINES.find(function(x){return x.id===plId;});
+  if (!pl) return;
+  plProductLineModal(pl);
+}
+
+async function plDeleteProductLine(plId){
+  var pl = PRODUCT_LINES.find(function(x){return x.id===plId;});
+  if (!pl) return;
+  if (!confirm('Supprimer la Product Line "'+pl.name+'" ?')) return;
+  await spDelete('AF_ProductLines', plId);
+  PRODUCT_LINES = PRODUCT_LINES.filter(function(x){return x.id!==plId;});
+  addHist('del', 'Product Line "'+pl.name+'" supprimée');
+  plRender();
+  toast('Product Line supprimée ✓');
+}
+
+async function plSavePL(pl) {
+  try {
+    await spUpsert('AF_ProductLines', pl.id, {
+      name: pl.name,
+      society: pl.society || '',
+      countries_json: JSON.stringify(pl.countries||[]),
+      description: pl.description || '',
+      Title: pl.name,
+    });
+  } catch(e){ console.warn('[PL] save error:', e.message); toast('Erreur sauvegarde: '+e.message); }
+}
+
+// ══════════════════════════════════════════════════════════════
 //  HISTORIQUE (inchangé)
 // ══════════════════════════════════════════════════════════════
 V['historique']=()=>`<div class="topbar"><div class="tbtitle">Historique des modifications</div></div>
