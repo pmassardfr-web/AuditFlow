@@ -232,6 +232,7 @@ var LIST_SCHEMAS = {
     {name:'risk',number:{}},{name:'risk_level',text:{}},{name:'archived',boolean:{}},
     {name:'risks_json',text:{}},{name:'y25_json',text:{}},{name:'y26_json',text:{}},
     {name:'y27_json',text:{}},{name:'y28_json',text:{}},
+    {name:'risk_refs_json',text:{}},
   ],
   AF_Actions: [
     {name:'af_id',text:{}},{name:'title',text:{}},{name:'audit',text:{}},
@@ -251,6 +252,23 @@ var LIST_SCHEMAS = {
     {name:'af_id',text:{}},{name:'email',text:{}},{name:'name',text:{}},
     {name:'role',text:{}},{name:'initials',text:{}},{name:'status',text:{}},
     {name:'pwd',text:{}},{name:'source',text:{}},
+  ],
+  AF_Structure: [
+    {name:'af_id',text:{}},{name:'region',text:{}},{name:'country',text:{}},
+    {name:'companies_json',text:{}},
+  ],
+  AF_RiskUniverse: [
+    {name:'af_id',text:{}},{name:'level',text:{}},{name:'parent_id',text:{}},
+    {name:'title',text:{}},{name:'description',text:{}},
+    {name:'probability',text:{}},{name:'impact',text:{}},
+    {name:'impact_types_json',text:{}},
+  ],
+  AF_ProductLines: [
+    {name:'af_id',text:{}},{name:'name',text:{}},{name:'society',text:{}},
+    {name:'countries_json',text:{}},{name:'description',text:{}},
+  ],
+  AF_Config: [
+    {name:'af_id',text:{}},{name:'value_json',text:{}},
   ],
 };
 
@@ -366,6 +384,7 @@ async function loadAllData() {
       id:f.af_id, dom:f.dom, proc:f.proc||f.Title, risk:parseInt(f.risk)||1,
       riskLevel:f.risk_level||'faible', archived:f.archived||false,
       risks:tryParse(f.risks_json,[]),
+      riskRefs: tryParse(f.risk_refs_json, []), // NOUVEAU — IDs de risques du Risk Universe
       y25:tryParse(f.y25_json,null), y26:tryParse(f.y26_json,null),
       y27:tryParse(f.y27_json,null), y28:tryParse(f.y28_json,null),
     };});
@@ -383,6 +402,51 @@ async function loadAllData() {
 
     AUDIT_PLAN=DB.auditPlan; PROCESSES=DB.processes; ACTIONS=DB.actions;
     HISTORY_LOG=DB.history; USERS=DB.users;
+
+    // ── Charger les nouvelles listes (Structure / RiskUniverse / ProductLines) ──
+    // Si une liste n'existe pas, on ne bloque pas le chargement des autres
+    try {
+      var structRaw = await listItems('AF_Structure');
+      GROUP_STRUCTURE = structRaw.map(function(r){
+        var f = r.fields;
+        return {
+          id: f.af_id, region: f.region || '', country: f.country || '',
+          companies: tryParse(f.companies_json, []),
+        };
+      });
+      console.log('[SP] Structure loaded:', GROUP_STRUCTURE.length, 'countries');
+    } catch(e){ console.warn('[SP] AF_Structure not found or empty:', e.message); GROUP_STRUCTURE = []; }
+
+    try {
+      var riskRaw = await listItems('AF_RiskUniverse');
+      RISK_UNIVERSE = riskRaw.map(function(r){
+        var f = r.fields;
+        return {
+          id: f.af_id, level: f.level || 'group',
+          parentId: f.parent_id || '',
+          title: f.title || f.Title || '',
+          description: f.description || '',
+          probability: f.probability || '',
+          impact: f.impact || '',
+          impactTypes: tryParse(f.impact_types_json, []),
+        };
+      });
+      console.log('[SP] RiskUniverse loaded:', RISK_UNIVERSE.length, 'risks');
+    } catch(e){ console.warn('[SP] AF_RiskUniverse not found or empty:', e.message); RISK_UNIVERSE = []; }
+
+    try {
+      var plRaw = await listItems('AF_ProductLines');
+      PRODUCT_LINES = plRaw.map(function(r){
+        var f = r.fields;
+        return {
+          id: f.af_id, name: f.name || f.Title || '',
+          society: f.society || '',
+          countries: tryParse(f.countries_json, []),
+          description: f.description || '',
+        };
+      });
+      console.log('[SP] ProductLines loaded:', PRODUCT_LINES.length, 'PLs');
+    } catch(e){ console.warn('[SP] AF_ProductLines not found or empty:', e.message); PRODUCT_LINES = []; }
 
     // Synchroniser TM et AVC avec les utilisateurs SharePoint
     syncTeamMembers();
