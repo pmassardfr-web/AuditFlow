@@ -3141,104 +3141,525 @@ V['audit-detail']=()=>{
         <span style="font-size:11px;color:var(--text-2)" id="gp-pct">${pct}%</span>
       </div>
       <div class="card" style="margin-bottom:1rem" id="stepper-card">${renderStepper()}</div>
-      <div class="tabs" id="det-tabs">${renderDetTabs()}</div>
       <div id="det-content">${renderDetContent()}</div>
     </div>`;
 };
 I['audit-detail']=()=>{};
 
-function getStepTabs(){if(CS===4)return['roles','tasks','controls','risk-matrix','docs','notes'];if(CS===5)return['roles','tasks','controls-exec','findings-exec','docs','notes'];if(CS===6)return['roles','tasks','findings','maturity','docs','notes'];if(CS===8)return['roles','tasks','mgt-resp','docs','notes'];return['roles','tasks','docs','notes'];}
-const TLBL={'roles':'Rôles','tasks':'Tâches','controls':'Contrôles','controls-exec':'Contrôles & Tests','risk-matrix':'Matrice Risques','findings-exec':'Findings (tests)','findings':'Findings','maturity':'Overall Maturity','mgt-resp':'Mgt Response','docs':'Documents','notes':'Notes'};
-function renderDetTabs(){return getStepTabs().map(t=>`<div class="tab ${CT===t?'active':''}" onclick="switchDetTab('${t}')">${TLBL[t]}</div>`).join('');}
+function getStepTabs(){return ['main'];} // gardé pour compat (plus utilisé avec onglets)
+const TLBL={'main':'Détail'};
+function renderDetTabs(){return '';}
 function renderStepper(){
   const phases=[[0,1,2],[3,4,5],[6,7,8,9]];
   const pn=['Préparation','Réalisation','Restitution'];
   const d=getAudData(CA);
   return phases.map((idxs,pi)=>`<div class="pl">${pn[pi]}</div><div class="step-row" style="margin-bottom:${pi<2?'1rem':'0'}">${idxs.map(i=>{const cls=i<CS?'done':i===CS?'active':'';const lbl=STEPS[i].s.replace('/',' /').split(' /');const st=(d.tasks[i]||[]);const assigned=[...new Set(st.map(t=>t.assignee).filter(x=>x&&x!=='none'))];return`<div class="step-item ${cls}" onclick="goStep(${i})"><div class="sc">${i<CS?'✓':i+1}</div><div class="sl">${lbl[0]}${lbl[1]?'<br>/'+lbl[1]:''}</div><div style="display:flex;gap:1px;margin-top:2px">${assigned.map(id=>avEl(id,12)).join('')}</div></div>`;}).join('')}</div>`).join('');
 }
+
+// ══════════════════════════════════════════════════════════════
+//  RENDER DET CONTENT — Layout commun (Workflow + Statut + Documents + Notes)
+//  + sections spécifiques métier pour étapes 5/6/7/8
+// ══════════════════════════════════════════════════════════════
 function renderDetContent(){
   const a=getAudits().find(x=>x.id===CA);
+  if (!a) return '';
   const s=STEPS[CS];
   const d=getAudData(CA);
-  const stepTasks=d.tasks[CS]||[];
-  if(CT==='roles'){
-    // Bloc workflow de revue pour les étapes clés
-    var workflowBlock = '';
-    if (isKeyStep(CS)) {
-      var state = getStepState(CA, CS);
-      var stateBadge = '';
-      var stateDesc = '';
-      if (state.status === 'preparation') {
-        stateBadge = '<span class="badge bpl">🔘 En préparation</span>';
-        stateDesc = 'Les auditeurs travaillent sur cette étape.';
-      } else if (state.status === 'finalized') {
-        stateBadge = '<span class="badge btg">🟡 Finalisée — en attente revue</span>';
-        stateDesc = 'Finalisée par '+(state.finalizedBy||'—')
-          + (state.finalizedAt?' le '+new Date(state.finalizedAt).toLocaleDateString('fr-FR',{day:'numeric',month:'short',year:'numeric'}):'');
-      } else if (state.status === 'reviewed') {
-        stateBadge = '<span class="badge bdn">✅ Revue & validée</span>';
-        stateDesc = 'Revue par '+(state.reviewedBy||'—')
-          + (state.reviewedAt?' le '+new Date(state.reviewedAt).toLocaleDateString('fr-FR',{day:'numeric',month:'short',year:'numeric'}):'');
-      }
+  var isAdmin = CU && CU.role === 'admin';
+  var isPreparer = (a.assignedTo||a.auditeurs||[]).indexOf(CU&&CU.id)>=0 || isAdmin;
 
-      // Préparateurs = auditeurs de l'audit
-      var ap = AUDIT_PLAN.find(function(x){return x.id===CA;});
-      var preparers = (ap && ap.auditeurs) ? ap.auditeurs : [];
-      var preparersHtml = preparers.length
-        ? preparers.map(function(id){
-            var m = TM[id];
-            if (!m) return '';
-            return '<div style="display:flex;align-items:center;gap:7px;padding:4px 0">'+avEl(id,22)+'<span style="font-size:12px">'+m.name+'</span></div>';
-          }).join('')
-        : '<div style="font-size:11px;color:var(--text-3)">Aucun auditeur assigné</div>';
+  var html = '';
 
-      // Reviewer = admin(s)
-      var admins = (USERS||[]).filter(function(u){return u.role==='admin' && u.status==='actif';});
-      var reviewersHtml = admins.length
-        ? admins.map(function(u){
-            var m = TM[u.id];
-            return '<div style="display:flex;align-items:center;gap:7px;padding:4px 0">'
-              + (m ? avEl(u.id,22) : '')
-              + '<span style="font-size:12px">'+u.name+'</span></div>';
-          }).join('')
-        : '<div style="font-size:11px;color:var(--text-3)">Aucun admin</div>';
+  // ── EN-TÊTE ──────────────────────────────────────────────
+  html += '<div class="card" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">'
+    + '<div><div style="font-size:14px;font-weight:600">Étape '+(CS+1)+' — '+s.s+'</div>'
+    + '<div style="font-size:11px;color:var(--text-3);margin-top:2px">Phase '+s.ph+'</div></div>'
+    + badge(a.statut||a.status||'Planifié')
+    + '</div>';
 
-      workflowBlock =
-        '<div class="card" style="background:var(--purple-lt);border:.5px solid var(--purple);margin-bottom:.875rem;padding:12px 14px">'
-        + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'
-          + '<div style="font-size:12px;font-weight:600;color:var(--purple-dk)">⚡ Workflow de revue — étape clé</div>'
-          + stateBadge
-        + '</div>'
-        + '<div style="font-size:11px;color:var(--text-2);margin-bottom:10px">'+stateDesc+'</div>'
-        + '<div class="g2">'
-          + '<div>'
-            + '<div style="font-size:10px;color:var(--text-3);font-weight:500;margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em">Préparateurs</div>'
-            + preparersHtml
-          + '</div>'
-          + '<div>'
-            + '<div style="font-size:10px;color:var(--text-3);font-weight:500;margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em">Reviewer</div>'
-            + reviewersHtml
-          + '</div>'
-        + '</div>'
-        + '</div>';
-    }
+  // ── 1. WORKFLOW (étape clé ou non) ───────────────────────
+  html += renderWorkflowSection();
 
-    return workflowBlock + `<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.875rem"><div style="font-size:13px;font-weight:600">Étape ${CS+1} — ${s.s}</div>${badge(a.status)}</div><div class="g2" style="margin-bottom:.875rem">${(a.assignedTo||[]).map(id=>{const m=TM[id];if(!m)return'';const my=stepTasks.filter(t=>t.assignee===id);return`<div class="card" style="background:var(--bg)"><div style="font-size:10px;color:var(--text-3);margin-bottom:5px">Auditrice</div><div style="display:flex;align-items:center;gap:7px">${avEl(id,26)}<div><div style="font-size:12px;font-weight:500">${m.name}</div><div style="font-size:10px;color:${my.filter(t=>t.done).length===my.length&&my.length>0?'var(--green)':'var(--amber)'}">${my.length?my.filter(t=>t.done).length+'/'+my.length+' tâches':'Aucune tâche'}</div></div></div></div>`;}).join('')}<div class="card" style="background:var(--bg)"><div style="font-size:10px;color:var(--text-3);margin-bottom:5px">Valideur</div><div style="display:flex;align-items:center;gap:7px">${avEl('pm',26)}<div><div style="font-size:12px;font-weight:500">Philippe M.</div><div style="font-size:10px;color:var(--amber)">Validation requise</div></div></div></div></div>${CU?.role!=='admin'?'<div class="notice">La validation est réservée au Directeur Audit.</div>':''}</div>`;
+  // ── 2. STATUT (cases à cocher préparer / admin) ──────────
+  html += renderStatusSection();
+
+  // ── 3. SECTIONS SPÉCIFIQUES MÉTIER selon l'étape ─────────
+  if (CS === 4) {
+    // WCGW + Contrôles (Phase 3 - à venir)
+    html += renderRiskSection();
+    html += renderWCGWSection();
+    html += renderControlsSection();
+  } else if (CS === 5) {
+    // Tests des contrôles (Phase 4 - à venir)
+    html += renderTestsSection();
+  } else if (CS === 6) {
+    // Findings + Maturity (Phase 4 - à venir)
+    html += renderFindingsSection();
+    html += renderMaturitySection();
+  } else if (CS === 8) {
+    // Mgt Responses (Phase 4 - à venir)
+    html += renderMgtRespSection();
   }
-  if(CT==='tasks'){const done=stepTasks.filter(t=>t.done).length;return`<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.875rem"><div style="font-size:13px;font-weight:600">Tâches — ${s.s}</div><div style="display:flex;gap:8px;align-items:center"><span style="font-size:11px;color:var(--text-2)">${done}/${stepTasks.length}</span><button class="bs" style="font-size:11px" onclick="showNewTaskModal()">+ Ajouter</button></div></div><div id="task-list">${renderTaskList(stepTasks,a)}</div></div>`;}
-  if(CT==='controls'){const ctrls=d.controls[CS]||[];return`<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.875rem"><div style="font-size:13px;font-weight:600">Contrôles identifiés</div><button class="bs" style="font-size:11px" onclick="showAddControlModal()">+ Ajouter</button></div>${buildControlList(ctrls)}</div>`;}
-  if(CT==='controls-exec'){const step5c=d.controls[4]||[];const keyExist=step5c.filter(c=>c.clef&&c.design==='existing');const targets=step5c.filter(c=>c.design==='target');return`<div class="card"><div style="font-size:13px;font-weight:600;margin-bottom:.875rem">Tests — Contrôles clefs existants</div>${keyExist.length?buildExecTable(keyExist):'<div style="font-size:12px;color:var(--text-3);padding:.5rem">Aucun contrôle clef existant.</div>'}<div style="font-size:13px;font-weight:600;margin:.875rem 0 .5rem">Contrôles Target — anomalies automatiques</div>${buildTargetList(targets)}</div>`;}
-  if(CT==='risk-matrix'){return renderRiskMatrix();}
-  if(CT==='findings-exec'||CT==='findings'){const step5c=d.controls[4]||[];const step6c=(d.controls[4]||[]).filter(x=>x.clef&&x.design==='existing'&&x.finalized&&x.result==='fail');const failF=step6c.filter(c=>c.finding);const targetF=step5c.filter(c=>c.design==='target');const manualF=d.findings||[];return`<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.875rem"><div style="font-size:13px;font-weight:600">Findings</div><button class="bs" style="font-size:11px" onclick="showAddFindingModal()">+ Ajouter un finding</button></div>${failF.length?('<div style="font-size:11px;font-weight:500;color:var(--text-2);margin-bottom:.5rem">Contrôles - Fail</div>'+failF.map(ctrl=>'<div class="fr"><div class="fh"><span class="badge bfl">Fail</span><div class="ft">'+ctrl.name+'</div></div><div style="font-size:11px;color:var(--text-2)">'+ctrl.finding+'</div></div>').join('')):''}${targetF.length?('<div style="font-size:11px;font-weight:500;color:var(--text-2);margin:.75rem 0 .5rem">Contrôles non existants (Target)</div>'+targetF.map(ctrl=>'<div class="fr"><div class="fh"><span class="badge btg">Target</span><div class="ft">'+ctrl.name+'</div></div><div style="font-size:11px;color:var(--red)">Contrôle non existant.</div></div>').join('')):''}${manualF.length?('<div style="font-size:11px;font-weight:500;color:var(--text-2);margin:.75rem 0 .5rem">Findings additionnels</div>'+manualF.map((f,idx2)=>'<div class="fr"><div class="fh"><span class="badge bpc">Finding</span><div class="ft">'+f.title+'</div><button class="bd" style="font-size:10px;padding:2px 6px" onclick="removeManualFinding('+idx2+')">X</button></div><div style="font-size:11px;color:var(--text-2)">'+f.desc+'</div></div>').join('')):''}${!failF.length&&!targetF.length&&!manualF.length?'<div style="font-size:12px;color:var(--text-3)">Aucun finding pour le moment.</div>':''}</div>`;}
-  if(CT==='maturity'){const d=getAudData(CA);if(!d.maturity)d.maturity={level:'',notes:'',saved:false};const MLEVELS=[{key:'unsatisfactory',label:'Unsatisfactory',color:'#A32D2D',bg:'#FCEBEB',def:'Contrôle interne insuffisant.',meas:'Plus de 70% des contrôles testés sont en Fail.'},{key:'major',label:'Major Improvements Needed',color:'#854F0B',bg:'#FAEEDA',def:'Le cadre de contrôle présente des lacunes importantes.',meas:'40 à 70% des contrôles testés en Fail.'},{key:'some',label:'Some Improvements Needed',color:'#1D6B45',bg:'#E1F5EE',def:'Des améliorations ponctuelles sont nécessaires.',meas:'10 à 40% des contrôles en Fail.'},{key:'effective',label:'Effective',color:'#3B6D11',bg:'#EAF3DE',def:'Le cadre de contrôle est solide et efficace.',meas:'Moins de 10% des contrôles en Fail.'}];const step6c=(d.controls[4]||[]).filter(x=>x.clef&&x.design==='existing'&&x.finalized);const failCount=step6c.filter(x=>x.result==='fail').length;const passCount=step6c.filter(x=>x.result==='pass').length;const targetCount=(d.controls[4]||[]).filter(x=>x.design==='target').length;const ratio=step6c.length?failCount/step6c.length:0;const suggestedKey=step6c.length===0?'':ratio>0.7?'unsatisfactory':ratio>0.4?'major':ratio>0.1?'some':'effective';const sugLabel=suggestedKey?MLEVELS.find(l=>l.key===suggestedKey):null;let html='<div class="card">';html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem"><div style="font-size:13px;font-weight:600">Overall Process Maturity</div>'+(d.maturity.saved?'<span class="tag-new">✓ Évaluation sauvegardée</span>':'')+'</div>';html+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:1rem"><div class="card" style="background:var(--bg);text-align:center"><div style="font-size:10px;color:var(--text-3);margin-bottom:3px">Tests finalisés</div><div style="font-size:20px;font-weight:600">'+step6c.length+'</div></div><div class="card" style="background:var(--green-lt);text-align:center"><div style="font-size:10px;color:var(--text-3);margin-bottom:3px">Pass</div><div style="font-size:20px;font-weight:600;color:var(--green)">'+passCount+'</div></div><div class="card" style="background:var(--red-lt);text-align:center"><div style="font-size:10px;color:var(--text-3);margin-bottom:3px">Fail + Target</div><div style="font-size:20px;font-weight:600;color:var(--red)">'+(failCount+targetCount)+'</div></div></div>';if(sugLabel)html+='<div style="background:var(--purple-lt);border:.5px solid var(--purple);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--purple-dk);margin-bottom:1rem">Niveau suggéré : <strong>'+sugLabel.label+'</strong></div>';html+='<div style="font-size:12px;font-weight:500;color:var(--text-2);margin-bottom:.625rem">Sélectionnez le niveau de maturité :</div><div style="display:flex;flex-direction:column;gap:8px;margin-bottom:1rem">';MLEVELS.forEach(l=>{const sel=d.maturity.level===l.key;html+='<div onclick="setMaturity(\''+l.key+'\')" style="border:2px solid '+(sel?l.color:'var(--border)')+';border-radius:var(--radius);padding:.875rem 1rem;cursor:pointer;background:'+(sel?l.bg:'var(--bg-card)')+';transition:all .15s"><div style="display:flex;align-items:center;gap:10px;margin-bottom:6px"><div style="width:14px;height:14px;border-radius:50%;border:2px solid '+l.color+';background:'+(sel?l.color:'transparent')+';flex-shrink:0"></div><div style="font-size:13px;font-weight:600;color:'+l.color+'">'+l.label+'</div></div><div style="padding-left:24px"><div style="font-size:11px;color:var(--text-2);margin-bottom:4px"><strong>Définition :</strong> '+l.def+'</div><div style="font-size:11px;color:var(--text-3)"><strong>Mesure :</strong> '+l.meas+'</div></div></div>';});html+='</div><div style="font-size:12px;font-weight:500;color:var(--text-2);margin-bottom:.375rem">Commentaires</div><textarea id="maturity-notes" style="width:100%;min-height:80px;resize:vertical;font-size:12px" placeholder="Justifiez votre évaluation...">'+(d.maturity.notes||'')+'</textarea><div style="display:flex;justify-content:flex-end;margin-top:8px"><button class="bp" onclick="saveMaturity()">Sauvegarder</button></div></div>';return html;}
-  if(CT==='mgt-resp'){const step5c=d.controls[4]||[];const step6c=(d.controls[4]||[]).filter(x=>x.clef&&x.design==='existing'&&x.finalized&&x.result==='fail');const allFindings=[...step6c.filter(c=>c.finding).map(c=>({id:'f_'+c.name,title:c.name,desc:c.finding,type:'fail'})),...step5c.filter(c=>c.design==='target').map(c=>({id:'t_'+c.name,title:c.name,desc:'Contrôle non existant',type:'target'})),...(d.findings||[]).map((f,i)=>({id:'m_'+i,title:f.title,desc:f.desc,type:'manual'}))];if(!d.mgtResp)d.mgtResp=[];allFindings.forEach(f=>{if(!d.mgtResp.find(r=>r.findingId===f.id))d.mgtResp.push({findingId:f.id,action:'',owner:'',year:2026,quarter:'Q1',pushed:false});});return`<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.875rem"><div style="font-size:13px;font-weight:600">Management Responses</div><button class="bs" style="font-size:11px" onclick="pushAllMgtResp()">Envoyer vers Plans d'action →</button></div>${allFindings.length?allFindings.map((f,fi)=>{const resp=d.mgtResp.find(r=>r.findingId===f.id)||{};const tbadge={fail:'bfl',target:'btg',manual:'bpc'}[f.type];return`<div class="mr-row"><div class="mr-hdr"><span class="badge ${tbadge}">${f.type==='fail'?'Fail':f.type==='target'?'Target':'Finding'}</span><div class="mr-title">${f.title}</div>${resp.pushed?'<span class="tag-new">✓ Envoyé</span>':''}</div><div style="font-size:11px;color:var(--text-2);margin-bottom:.625rem">${f.desc}</div><div class="mr-fields"><div><label style="font-size:10px;color:var(--text-3);display:block;margin-bottom:3px">Action</label><input style="font-size:11px" placeholder="Action corrective..." value="${resp.action||''}" onchange="setMgtResp('${f.id}','action',this.value)"/></div><div><label style="font-size:10px;color:var(--text-3);display:block;margin-bottom:3px">Owner</label><input style="font-size:11px" placeholder="ex : Finance, IT..." value="${resp.owner||''}" onchange="setMgtResp('${f.id}','owner',this.value)"/></div><div><label style="font-size:10px;color:var(--text-3);display:block;margin-bottom:3px">Deadline</label><div style="display:flex;gap:4px"><select style="font-size:11px" onchange="setMgtResp('${f.id}','year',parseInt(this.value))"><option ${resp.year===2025?'selected':''}>2025</option><option ${resp.year===2026?'selected':''} selected>2026</option><option ${resp.year===2027?'selected':''}>2027</option><option ${resp.year===2028?'selected':''}>2028</option></select><select style="font-size:11px" onchange="setMgtResp('${f.id}','quarter',this.value)"><option ${resp.quarter==='Q1'?'selected':''}>Q1</option><option ${resp.quarter==='Q2'?'selected':''}>Q2</option><option ${resp.quarter==='Q3'?'selected':''}>Q3</option><option ${resp.quarter==='Q4'?'selected':''}>Q4</option></select></div></div></div></div>`;}).join(''):'<div style="font-size:12px;color:var(--text-3)">Aucun finding identifié.</div>'}</div>`;}
-  if(CT==='docs'){var reqDocs=REQUIRED_DOCS[CS]||[];var reqHtml='';if(reqDocs.length){reqHtml='<div style="background:#f0effe;border:.5px solid #AFA9EC;border-radius:6px;padding:8px 12px;margin-bottom:.75rem;font-size:11px"><div style="font-weight:600;color:#3C3489;margin-bottom:5px">Documents requis :</div>';reqDocs.forEach(function(req){var ok=(d.docs||[]).some(function(f){return f.name.toLowerCase().indexOf(req.toLowerCase())!==-1;});reqHtml+='<div style="display:flex;align-items:center;gap:6px;padding:2px 0"><span style="color:'+(ok?'#1D9E75':'#E24B4A')+';font-size:14px;font-weight:bold">'+(ok?'✓':'✗')+'</span><span style="color:'+(ok?'#085041':'#A32D2D')+';'+(ok?'opacity:.7;text-decoration:line-through':'')+'">' +req+'</span>'+(ok?'':'<span style="font-size:10px;color:#A32D2D;background:#FCE8E8;padding:1px 6px;border-radius:10px">requis</span>')+'</div>';});reqHtml+='</div>';}return'<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.875rem"><div style="font-size:13px;font-weight:600">Documents</div><button class="bs" style="font-size:11px" onclick="addFakeDoc()">+ Ajouter</button></div>'+reqHtml+'<div class="uz" onclick="addFakeDoc()"><div style="font-size:12px;color:var(--text-2)">Glissez vos fichiers ou cliquez</div><div style="font-size:10px;color:var(--text-3);margin-top:2px">PDF, Excel, Word, PowerPoint</div></div><div id="doc-list">'+buildDocList(d.docs)+'</div></div>';}
-  if(CT==='notes'){return`<div class="card"><div style="font-size:13px;font-weight:600;margin-bottom:.75rem">Notes de l'auditeur</div><textarea style="width:100%;min-height:120px;resize:vertical" placeholder="Observations, constats...">${d.notes||''}</textarea><div style="display:flex;justify-content:flex-end;margin-top:8px"><button class="bp" onclick="saveNotes()">Sauvegarder</button></div></div>`;}
-  return'';
+
+  // ── 4. DOCUMENTS ─────────────────────────────────────────
+  html += renderDocumentsSection();
+
+  // ── 5. NOTES (préparer + reviewer) ───────────────────────
+  html += renderNotesSection();
+
+  return html;
 }
 
-function goStep(i){CS=i;const tabs=getStepTabs();if(!tabs.includes(CT))CT='roles';const pct=Math.min(100,(i+1)*10);document.getElementById('stepper-card').innerHTML=renderStepper();document.getElementById('gp-fill').style.width=pct+'%';document.getElementById('gp-pct').textContent=pct+'%';document.getElementById('gp-lbl').textContent=`Étape ${i+1}/11 — ${STEPS[i].s}`;document.getElementById('det-tabs').innerHTML=renderDetTabs();document.getElementById('det-content').innerHTML=renderDetContent();}
-function switchDetTab(tab){CT=tab;document.getElementById('det-tabs').innerHTML=renderDetTabs();document.getElementById('det-content').innerHTML=renderDetContent();}
+// ─── Helpers de rendu de sections ─────────────────────────
+
+function renderWorkflowSection() {
+  var keyStep = isKeyStep(CS);
+  var html = '<div class="card" style="margin-bottom:.75rem">';
+  html += '<div style="display:flex;align-items:center;justify-content:space-between">';
+  html += '<div style="font-size:12px;font-weight:600;color:var(--text-2)">Workflow</div>';
+  if (keyStep) {
+    html += '<span class="badge bpc" style="font-size:10px">⚡ Étape clé — revue requise</span>';
+  } else {
+    html += '<span class="badge bpl" style="font-size:10px">Étape standard</span>';
+  }
+  html += '</div>';
+  if (keyStep) {
+    html += '<div style="font-size:11px;color:var(--text-3);margin-top:6px">Cette étape doit être finalisée par le préparer puis revue par l\'admin avant validation.</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+function renderStatusSection() {
+  var state = getStepState(CA, CS);
+  var isAdmin = CU && CU.role === 'admin';
+  var keyStep = isKeyStep(CS);
+
+  // Pour les étapes non-clé, on garde un statut simplifié
+  // Pour les étapes clé, on a 3 états : preparation / finalized / reviewed
+  var prepDone = (state.status === 'finalized' || state.status === 'reviewed');
+  var revDone = (state.status === 'reviewed');
+
+  var html = '<div class="card" style="margin-bottom:.75rem">';
+  html += '<div style="font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:8px">Statut de l\'étape</div>';
+  html += '<div style="display:flex;flex-direction:column;gap:8px">';
+
+  // Case 1 : "Étape exécutée — prête pour revue" (préparer)
+  html += '<label style="display:flex !important;align-items:center !important;flex-direction:row !important;gap:8px;font-size:12px;width:auto !important;padding:0 !important;cursor:pointer">'
+    + '<input type="checkbox" '+(prepDone?'checked':'')+' '+(prepDone&&!isAdmin?'disabled':'')+' onchange="toggleStepPrepDone(this.checked)" style="width:14px !important">'
+    + '<span style="flex:1">Étape exécutée — prête pour revue</span>'
+    + '<span style="font-size:10px;color:var(--text-3)">(préparer)</span>'
+    + '</label>';
+  if (state.finalizedBy && state.finalizedAt) {
+    html += '<div style="font-size:10px;color:var(--text-3);padding-left:22px;margin-top:-6px">Par '+state.finalizedBy+' le '+new Date(state.finalizedAt).toLocaleDateString('fr-FR',{day:'numeric',month:'short',year:'numeric'})+'</div>';
+  }
+
+  // Case 2 : "Étape revue et validée" (admin uniquement)
+  html += '<label style="display:flex !important;align-items:center !important;flex-direction:row !important;gap:8px;font-size:12px;width:auto !important;padding:0 !important;cursor:'+(isAdmin&&prepDone?'pointer':'not-allowed')+';opacity:'+(prepDone?'1':'.5')+'">'
+    + '<input type="checkbox" '+(revDone?'checked':'')+' '+(!isAdmin||!prepDone?'disabled':'')+' onchange="toggleStepReviewed(this.checked)" style="width:14px !important">'
+    + '<span style="flex:1">Étape revue et validée</span>'
+    + '<span style="font-size:10px;color:var(--text-3)">(admin)</span>'
+    + '</label>';
+  if (state.reviewedBy && state.reviewedAt) {
+    html += '<div style="font-size:10px;color:var(--text-3);padding-left:22px;margin-top:-6px">Par '+state.reviewedBy+' le '+new Date(state.reviewedAt).toLocaleDateString('fr-FR',{day:'numeric',month:'short',year:'numeric'})+'</div>';
+  }
+
+  html += '</div></div>';
+  return html;
+}
+
+function renderDocumentsSection() {
+  var d = getAudData(CA);
+  var expectedDocs = (typeof EXPECTED_DOCS_BY_STEP !== 'undefined' && EXPECTED_DOCS_BY_STEP[CS]) ? EXPECTED_DOCS_BY_STEP[CS] : [];
+  var stepDocs = (d.docs||[]).filter(function(doc){
+    return doc && (doc.step === CS || doc.step === undefined); // compat avec docs sans step
+  });
+  var isAdmin = CU && CU.role === 'admin';
+
+  var html = '<div class="card" style="margin-bottom:.75rem">';
+  html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">';
+  html += '<div style="font-size:12px;font-weight:600;color:var(--text-2)">Documents</div>';
+  html += '<button class="bs" style="font-size:11px;padding:3px 9px" onclick="addFreeDocument()">+ Document libre</button>';
+  html += '</div>';
+
+  if (!expectedDocs.length && !stepDocs.length) {
+    html += '<div style="font-size:11px;color:var(--text-3);font-style:italic;padding:.5rem">Aucun document attendu pour cette étape.</div>';
+  }
+
+  // Afficher chaque document attendu (même si pas encore uploadé)
+  expectedDocs.forEach(function(expectedName){
+    var matchingDoc = stepDocs.find(function(doc){
+      return (doc.expectedName === expectedName) || (doc.name||'').toLowerCase().indexOf(expectedName.toLowerCase()) >= 0;
+    });
+    html += renderDocumentRow(expectedName, matchingDoc, true, isAdmin);
+  });
+
+  // Afficher les docs additionnels (libres) qui ne correspondent à aucun document attendu
+  stepDocs.forEach(function(doc){
+    var isMatched = expectedDocs.some(function(expectedName){
+      return (doc.expectedName === expectedName) || (doc.name||'').toLowerCase().indexOf(expectedName.toLowerCase()) >= 0;
+    });
+    if (!isMatched) {
+      html += renderDocumentRow(doc.name, doc, false, isAdmin);
+    }
+  });
+
+  html += '</div>';
+  return html;
+}
+
+function renderDocumentRow(label, doc, isExpected, isAdmin) {
+  var hasDoc = !!doc;
+  var reviewed = doc && doc.reviewStatus === 'reviewed';
+  var pendingReview = doc && doc.reviewStatus === 'pending';
+
+  var html = '<div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:8px 0;border-top:.5px solid var(--border)">';
+  // Colonne label + détails fichier
+  html += '<div style="min-width:0">';
+  html += '<div style="font-size:12px;font-weight:500;display:flex;align-items:center;gap:6px">';
+  html += '<span>'+label+'</span>';
+  if (isExpected) html += '<span style="font-size:9px;color:var(--text-3)">(attendu)</span>';
+  html += '</div>';
+  if (hasDoc) {
+    html += '<div style="font-size:10px;color:var(--text-3);margin-top:2px">'+(doc.name||'fichier')+(doc.size?' — '+doc.size:'')+(doc.uploadedBy?' · par '+doc.uploadedBy:'')+'</div>';
+  } else {
+    html += '<div style="font-size:10px;color:var(--text-3);margin-top:2px;font-style:italic">Aucun fichier attaché</div>';
+  }
+  html += '</div>';
+  // Colonne actions
+  html += '<div style="display:flex;gap:5px;flex-wrap:nowrap">';
+  if (!hasDoc) {
+    html += '<button class="bs" style="font-size:10px;padding:3px 8px" onclick="attachExpectedDocument(\''+_escQ(label)+'\')">Attacher un document</button>';
+  } else {
+    if (!reviewed) {
+      if (!pendingReview) {
+        html += '<button class="bs" style="font-size:10px;padding:3px 8px" onclick="markDocPendingReview(\''+doc.id+'\')">Prêt pour revue</button>';
+      } else {
+        html += '<span class="badge" style="background:#FAEEDA;color:#854F0B;font-size:9px;padding:3px 7px">⏳ En attente revue</span>';
+        if (isAdmin) {
+          html += '<button class="bs" style="font-size:10px;padding:3px 8px" onclick="markDocReviewed(\''+doc.id+'\')">Document revu</button>';
+        }
+      }
+    } else {
+      html += '<span class="badge bdn" style="font-size:9px;padding:3px 7px">✓ Revu</span>';
+    }
+    html += '<button class="bs" style="font-size:10px;padding:3px 6px" onclick="downloadDoc(\''+doc.id+'\')" title="Télécharger">⬇</button>';
+    html += '<button class="bd" style="font-size:10px;padding:3px 6px" onclick="removeDoc(\''+doc.id+'\')" title="Supprimer">×</button>';
+  }
+  html += '</div>';
+  html += '</div>';
+  return html;
+}
+
+function renderNotesSection() {
+  var d = getAudData(CA);
+  // Stockage : d.prepNotes[CS] et d.revNotes[CS]
+  if (!d.prepNotes) d.prepNotes = {};
+  if (!d.revNotes) d.revNotes = {};
+  var prepNote = d.prepNotes[CS] || '';
+  var revNote = d.revNotes[CS] || '';
+  var isAdmin = CU && CU.role === 'admin';
+
+  var html = '<div class="card" style="margin-bottom:.75rem">';
+  html += '<div style="font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:10px">Notes</div>';
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">';
+  html += '<div>';
+  html += '<label style="font-size:10px;color:var(--text-3);display:block;margin-bottom:4px">Notes du préparer</label>';
+  html += '<textarea id="prep-notes-'+CS+'" placeholder="Notes pendant l\'exécution..." style="width:100%;min-height:80px;resize:vertical;font-size:12px" onchange="saveStepNote(\'prep\', this.value)">'+prepNote+'</textarea>';
+  html += '</div>';
+  html += '<div>';
+  html += '<label style="font-size:10px;color:var(--text-3);display:block;margin-bottom:4px">Notes du reviewer'+(!isAdmin?' (lecture seule)':'')+'</label>';
+  html += '<textarea id="rev-notes-'+CS+'" placeholder="Commentaires de revue..." style="width:100%;min-height:80px;resize:vertical;font-size:12px" '+(!isAdmin?'readonly':'')+' onchange="saveStepNote(\'rev\', this.value)">'+revNote+'</textarea>';
+  html += '</div>';
+  html += '</div>';
+  html += '</div>';
+  return html;
+}
+
+// ─── Sections métier (Phase 3/4 - placeholder pour l'instant) ─────────────────
+
+function renderRiskSection() {
+  // Étape 5 : risques du processus (lecture seule depuis Risk Universe)
+  var a = getAudits().find(function(x){return x.id===CA;});
+  var pids = (Array.isArray(a&&a.processIds) && a.processIds.length) ? a.processIds : (a&&a.processId ? [a.processId] : []);
+  var seen = {};
+  var risks = [];
+  pids.forEach(function(pid){
+    var p = PROCESSES.find(function(x){return x.id===pid;});
+    if (!p) return;
+    (p.riskRefs||[]).forEach(function(rid){
+      if (seen[rid]) return;
+      seen[rid] = true;
+      var r = (RISK_UNIVERSE||[]).find(function(x){return x.id===rid;});
+      if (r) risks.push(r);
+    });
+  });
+
+  var html = '<div class="card" style="margin-bottom:.75rem">';
+  html += '<div style="font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:6px">Risques du processus <span style="font-weight:400;font-size:10px;color:var(--text-3)">(depuis Risk Universe — lecture seule)</span></div>';
+  if (!risks.length) {
+    html += '<div style="font-size:11px;color:var(--text-3);font-style:italic;padding:6px">Aucun risque associé. Va dans Audit Universe → Risques pour en associer aux processus.</div>';
+  } else {
+    html += '<div style="display:flex;flex-direction:column;gap:5px">';
+    risks.forEach(function(r){
+      var colors = (typeof RISK_IMPACT_COLORS!=='undefined' && RISK_IMPACT_COLORS[r.impact]) ? RISK_IMPACT_COLORS[r.impact] : {bg:'#F3F4F6',color:'#374151'};
+      html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 9px;background:var(--bg);border-radius:5px;font-size:11px">'
+        + '<span class="badge" style="background:'+colors.bg+';color:'+colors.color+';font-size:9px">'+(r.impact||'—')+'</span>'
+        + '<span style="font-weight:500">'+r.title+'</span>'
+        + '</div>';
+    });
+    html += '</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+function renderWCGWSection() { return '<div class="card" style="margin-bottom:.75rem"><div style="font-size:12px;font-weight:600;color:var(--text-2)">WCGW <span style="font-size:10px;font-weight:400;color:var(--text-3)">(à venir Phase 3)</span></div></div>'; }
+function renderControlsSection() { return '<div class="card" style="margin-bottom:.75rem"><div style="font-size:12px;font-weight:600;color:var(--text-2)">Contrôles <span style="font-size:10px;font-weight:400;color:var(--text-3)">(à venir Phase 3)</span></div></div>'; }
+function renderTestsSection() {
+  // Conserver l'ancien rendu Tests pour CS=5
+  var d = getAudData(CA);
+  var step5c = d.controls[4]||[];
+  var keyExist = step5c.filter(function(c){return c.clef && c.design==='existing';});
+  var targets = step5c.filter(function(c){return c.design==='target';});
+  return '<div class="card" style="margin-bottom:.75rem"><div style="font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:8px">Tests — Contrôles clefs existants</div>'
+    + (keyExist.length ? buildExecTable(keyExist) : '<div style="font-size:11px;color:var(--text-3);padding:.5rem;font-style:italic">Aucun contrôle clef existant. Définissez-en dans l\'étape 5.</div>')
+    + '<div style="font-size:12px;font-weight:600;margin:.875rem 0 .5rem;color:var(--text-2)">Contrôles Target (anomalies automatiques)</div>'
+    + (targets.length ? buildTargetList(targets) : '<div style="font-size:11px;color:var(--text-3);padding:.5rem;font-style:italic">Aucun contrôle Target.</div>')
+    + '</div>';
+}
+function renderFindingsSection() {
+  var d = getAudData(CA);
+  var step5c = d.controls[4]||[];
+  var step6c = step5c.filter(function(x){return x.clef && x.design==='existing' && x.finalized && x.result==='fail';});
+  var failF = step6c.filter(function(c){return c.finding;});
+  var targetF = step5c.filter(function(c){return c.design==='target';});
+  var manualF = d.findings||[];
+  var html = '<div class="card" style="margin-bottom:.75rem">';
+  html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">';
+  html += '<div style="font-size:12px;font-weight:600;color:var(--text-2)">Findings</div>';
+  html += '<button class="bs" style="font-size:11px;padding:3px 9px" onclick="showAddFindingModal()">+ Ajouter un finding</button>';
+  html += '</div>';
+  if (failF.length) {
+    html += '<div style="font-size:11px;font-weight:500;color:var(--text-2);margin-bottom:.5rem">Contrôles - Fail</div>';
+    failF.forEach(function(c){html += '<div class="fr"><div class="fh"><span class="badge bfl">Fail</span><div class="ft">'+c.name+'</div></div><div style="font-size:11px;color:var(--text-2)">'+c.finding+'</div></div>';});
+  }
+  if (targetF.length) {
+    html += '<div style="font-size:11px;font-weight:500;color:var(--text-2);margin:.75rem 0 .5rem">Contrôles non existants (Target)</div>';
+    targetF.forEach(function(c){html += '<div class="fr"><div class="fh"><span class="badge btg">Target</span><div class="ft">'+c.name+'</div></div><div style="font-size:11px;color:var(--red)">Contrôle non existant.</div></div>';});
+  }
+  if (manualF.length) {
+    html += '<div style="font-size:11px;font-weight:500;color:var(--text-2);margin:.75rem 0 .5rem">Findings additionnels</div>';
+    manualF.forEach(function(f, idx){html += '<div class="fr"><div class="fh"><span class="badge bpc">Finding</span><div class="ft">'+f.title+'</div><button class="bd" style="font-size:10px;padding:2px 6px" onclick="removeManualFinding('+idx+')">×</button></div><div style="font-size:11px;color:var(--text-2)">'+f.desc+'</div></div>';});
+  }
+  if (!failF.length && !targetF.length && !manualF.length) {
+    html += '<div style="font-size:11px;color:var(--text-3);font-style:italic;padding:.5rem">Aucun finding pour le moment.</div>';
+  }
+  html += '</div>';
+  return html;
+}
+function renderMaturitySection() {
+  // Conserver l'ancien rendu de la maturity (Phase 4)
+  var d = getAudData(CA);
+  if (!d.maturity) d.maturity = {level:'',notes:'',saved:false};
+  var MLEVELS = [
+    {key:'unsatisfactory',label:'Unsatisfactory',color:'#A32D2D',bg:'#FCEBEB'},
+    {key:'major',label:'Major Improvements Needed',color:'#854F0B',bg:'#FAEEDA'},
+    {key:'some',label:'Some Improvements Needed',color:'#1D6B45',bg:'#E1F5EE'},
+    {key:'effective',label:'Effective',color:'#3B6D11',bg:'#EAF3DE'},
+  ];
+  var html = '<div class="card" style="margin-bottom:.75rem">';
+  html += '<div style="font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:10px">Overall Process Maturity'+(d.maturity.saved?' <span class="tag-new" style="font-size:9px;margin-left:6px">✓ Sauvegardée</span>':'')+'</div>';
+  html += '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">';
+  MLEVELS.forEach(function(l){
+    var sel = d.maturity.level === l.key;
+    html += '<div onclick="setMaturity(\''+l.key+'\')" style="border:1.5px solid '+(sel?l.color:'var(--border)')+';border-radius:5px;padding:8px 10px;cursor:pointer;background:'+(sel?l.bg:'var(--bg-card)')+';font-size:12px"><strong style="color:'+l.color+'">'+l.label+'</strong></div>';
+  });
+  html += '</div>';
+  html += '<textarea id="maturity-notes" style="width:100%;min-height:60px;resize:vertical;font-size:12px" placeholder="Justification...">'+(d.maturity.notes||'')+'</textarea>';
+  html += '<div style="display:flex;justify-content:flex-end;margin-top:8px"><button class="bp" onclick="saveMaturity()">Sauvegarder</button></div>';
+  html += '</div>';
+  return html;
+}
+function renderMgtRespSection() {
+  // Conserver l'ancien rendu Mgt Resp
+  var d = getAudData(CA);
+  var step5c = d.controls[4]||[];
+  var step6c = step5c.filter(function(x){return x.clef && x.design==='existing' && x.finalized && x.result==='fail';});
+  var allFindings = [
+    ...step6c.filter(function(c){return c.finding;}).map(function(c){return {id:'f_'+c.name, title:c.name, desc:c.finding, type:'fail'};}),
+    ...step5c.filter(function(c){return c.design==='target';}).map(function(c){return {id:'t_'+c.name, title:c.name, desc:'Contrôle non existant', type:'target'};}),
+    ...(d.findings||[]).map(function(f, i){return {id:'m_'+i, title:f.title, desc:f.desc, type:'manual'};}),
+  ];
+  if (!d.mgtResp) d.mgtResp = [];
+  allFindings.forEach(function(f){
+    if (!d.mgtResp.find(function(r){return r.findingId===f.id;})) {
+      d.mgtResp.push({findingId:f.id, action:'', owner:'', year:2026, quarter:'Q1', pushed:false});
+    }
+  });
+  var html = '<div class="card" style="margin-bottom:.75rem">';
+  html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">';
+  html += '<div style="font-size:12px;font-weight:600;color:var(--text-2)">Management Responses</div>';
+  html += '<button class="bs" style="font-size:11px;padding:3px 9px" onclick="pushAllMgtResp()">Envoyer vers Plans d\'action →</button>';
+  html += '</div>';
+  if (!allFindings.length) {
+    html += '<div style="font-size:11px;color:var(--text-3);font-style:italic;padding:.5rem">Aucun finding identifié.</div>';
+  } else {
+    allFindings.forEach(function(f){
+      var resp = d.mgtResp.find(function(r){return r.findingId===f.id;}) || {};
+      var tbadge = {fail:'bfl',target:'btg',manual:'bpc'}[f.type];
+      html += '<div class="mr-row"><div class="mr-hdr"><span class="badge '+tbadge+'">'+(f.type==='fail'?'Fail':f.type==='target'?'Target':'Finding')+'</span><div class="mr-title">'+f.title+'</div>'+(resp.pushed?'<span class="tag-new">✓ Envoyé</span>':'')+'</div><div style="font-size:11px;color:var(--text-2);margin-bottom:.625rem">'+f.desc+'</div><div class="mr-fields"><div><label style="font-size:10px;color:var(--text-3);display:block;margin-bottom:3px">Action</label><input style="font-size:11px" placeholder="Action corrective..." value="'+(resp.action||'')+'" onchange="setMgtResp(\''+f.id+'\',\'action\',this.value)"/></div><div><label style="font-size:10px;color:var(--text-3);display:block;margin-bottom:3px">Owner</label><input style="font-size:11px" placeholder="ex: Finance, IT..." value="'+(resp.owner||'')+'" onchange="setMgtResp(\''+f.id+'\',\'owner\',this.value)"/></div><div><label style="font-size:10px;color:var(--text-3);display:block;margin-bottom:3px">Deadline</label><div style="display:flex;gap:4px"><select style="font-size:11px" onchange="setMgtResp(\''+f.id+'\',\'year\',parseInt(this.value))"><option '+(resp.year===2025?'selected':'')+'>2025</option><option '+(resp.year===2026?'selected':'')+'>2026</option><option '+(resp.year===2027?'selected':'')+'>2027</option><option '+(resp.year===2028?'selected':'')+'>2028</option></select><select style="font-size:11px" onchange="setMgtResp(\''+f.id+'\',\'quarter\',this.value)"><option '+(resp.quarter==='Q1'?'selected':'')+'>Q1</option><option '+(resp.quarter==='Q2'?'selected':'')+'>Q2</option><option '+(resp.quarter==='Q3'?'selected':'')+'>Q3</option><option '+(resp.quarter==='Q4'?'selected':'')+'>Q4</option></select></div></div></div></div>';
+    });
+  }
+  html += '</div>';
+  return html;
+}
+
+// ─── Handlers (Statut + Notes + Documents) ────────────────────
+
+async function toggleStepPrepDone(checked) {
+  var d = getAudData(CA);
+  if (!d.stepStates) d.stepStates = {};
+  var state = d.stepStates[CS] || {status:'preparation'};
+  if (checked) {
+    state.status = 'finalized';
+    state.finalizedBy = CU ? CU.name : '—';
+    state.finalizedAt = new Date().toISOString();
+  } else {
+    state.status = 'preparation';
+    delete state.finalizedBy; delete state.finalizedAt;
+    delete state.reviewedBy; delete state.reviewedAt;
+  }
+  d.stepStates[CS] = state;
+  await saveAuditData(CA);
+  document.getElementById('det-content').innerHTML = renderDetContent();
+  toast('Statut mis à jour ✓');
+}
+
+async function toggleStepReviewed(checked) {
+  var d = getAudData(CA);
+  if (!d.stepStates) d.stepStates = {};
+  var state = d.stepStates[CS] || {status:'preparation'};
+  if (checked) {
+    state.status = 'reviewed';
+    state.reviewedBy = CU ? CU.name : '—';
+    state.reviewedAt = new Date().toISOString();
+  } else {
+    state.status = 'finalized';
+    delete state.reviewedBy; delete state.reviewedAt;
+  }
+  d.stepStates[CS] = state;
+  await saveAuditData(CA);
+  document.getElementById('det-content').innerHTML = renderDetContent();
+  toast('Statut mis à jour ✓');
+}
+
+async function saveStepNote(which, value) {
+  var d = getAudData(CA);
+  if (which === 'prep') {
+    if (!d.prepNotes) d.prepNotes = {};
+    d.prepNotes[CS] = value;
+  } else {
+    if (!d.revNotes) d.revNotes = {};
+    d.revNotes[CS] = value;
+  }
+  await saveAuditData(CA);
+}
+
+// Documents : créer/uploader, marquer prêt-pour-revue, marquer revu, supprimer
+function attachExpectedDocument(expectedName) {
+  // Pour l'instant on simule l'upload (pas d'upload réel — à implémenter plus tard avec SharePoint Files)
+  var fakeName = prompt('Nom du fichier :', expectedName + '_v1.pdf');
+  if (!fakeName || !fakeName.trim()) return;
+  var d = getAudData(CA);
+  if (!d.docs) d.docs = [];
+  d.docs.push({
+    id: 'doc_'+Date.now(),
+    name: fakeName.trim(),
+    expectedName: expectedName,
+    step: CS,
+    size: '—',
+    uploadedBy: CU ? CU.name : '—',
+    uploadedAt: new Date().toISOString(),
+    reviewStatus: 'none', // none / pending / reviewed
+  });
+  saveAuditData(CA).then(function(){
+    document.getElementById('det-content').innerHTML = renderDetContent();
+    toast('Document attaché ✓');
+  });
+}
+
+function addFreeDocument() {
+  var name = prompt('Nom du document :', '');
+  if (!name || !name.trim()) return;
+  var d = getAudData(CA);
+  if (!d.docs) d.docs = [];
+  d.docs.push({
+    id: 'doc_'+Date.now(),
+    name: name.trim(),
+    step: CS,
+    size: '—',
+    uploadedBy: CU ? CU.name : '—',
+    uploadedAt: new Date().toISOString(),
+    reviewStatus: 'none',
+  });
+  saveAuditData(CA).then(function(){
+    document.getElementById('det-content').innerHTML = renderDetContent();
+    toast('Document ajouté ✓');
+  });
+}
+
+async function markDocPendingReview(docId) {
+  var d = getAudData(CA);
+  var doc = (d.docs||[]).find(function(x){return x.id===docId;});
+  if (!doc) return;
+  doc.reviewStatus = 'pending';
+  await saveAuditData(CA);
+  document.getElementById('det-content').innerHTML = renderDetContent();
+  toast('Document marqué prêt pour revue ✓');
+}
+
+async function markDocReviewed(docId) {
+  var d = getAudData(CA);
+  var doc = (d.docs||[]).find(function(x){return x.id===docId;});
+  if (!doc) return;
+  doc.reviewStatus = 'reviewed';
+  doc.reviewedBy = CU ? CU.name : '—';
+  doc.reviewedAt = new Date().toISOString();
+  await saveAuditData(CA);
+  document.getElementById('det-content').innerHTML = renderDetContent();
+  toast('Document validé ✓');
+}
+
+async function removeDoc(docId) {
+  if (!confirm('Supprimer ce document ?')) return;
+  var d = getAudData(CA);
+  d.docs = (d.docs||[]).filter(function(x){return x.id!==docId;});
+  await saveAuditData(CA);
+  document.getElementById('det-content').innerHTML = renderDetContent();
+  toast('Document supprimé ✓');
+}
+
+function downloadDoc(docId) {
+  var d = getAudData(CA);
+  var doc = (d.docs||[]).find(function(x){return x.id===docId;});
+  if (!doc) return;
+  toast('Téléchargement de '+doc.name+' (à implémenter)');
+}
+
+function goStep(i){
+  CS=i;
+  const pct=Math.min(100,(i+1)*10);
+  document.getElementById('stepper-card').innerHTML=renderStepper();
+  var pf=document.getElementById('gp-fill'); if(pf)pf.style.width=pct+'%';
+  var pp=document.getElementById('gp-pct'); if(pp)pp.textContent=pct+'%';
+  var pl=document.getElementById('gp-lbl'); if(pl)pl.textContent=`Étape ${i+1}/11 — ${STEPS[i].s}`;
+  document.getElementById('det-content').innerHTML=renderDetContent();
+}
+function switchDetTab(tab){
+  // Conservée pour compat (plus utilisée avec les nouveaux onglets)
+  document.getElementById('det-content').innerHTML=renderDetContent();
+}
 
 var REQUIRED_DOCS={0:['Audit Planning Memo'],1:['Work Program'],2:['Kick Off Slides','Meeting Invitation'],3:['Narratif'],4:['Testing Strategy'],5:['Testing Documentation'],6:['Rapport']};
 function getMissingDocs(stepIndex,docs){var required=REQUIRED_DOCS[stepIndex];if(!required||!required.length)return[];var uploadedNames=(docs||[]).map(function(f){return f.name.toLowerCase();});return required.filter(function(req){return!uploadedNames.some(function(name){return name.indexOf(req.toLowerCase())!==-1;});});}
