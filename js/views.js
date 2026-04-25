@@ -14,12 +14,15 @@ var STEP_PCT=[10,20,30,40,50,60,70,80,90,100];
 // Niveaux de risque Audit Universe
 var RISK_LEVELS=[
   {key:'faible',   label:'Faible',   color:'var(--green)',  badge:'bdn'},
-  {key:'modere',   label:'Modéré',   color:'var(--amber)',  badge:'bp2'},
-  {key:'eleve',    label:'Élevé',    color:'var(--red)',    badge:'blt'},
+  {key:'modéré',   label:'Modéré',   color:'var(--amber)',  badge:'bp2'},
+  {key:'élevé',    label:'Élevé',    color:'var(--red)',    badge:'blt'},
   {key:'critique', label:'Critique', color:'#7f1d1d',       badge:'bhi'},
 ];
 
 function riskLabel(key){
+  // Tolérer les anciennes valeurs sans accent (modere, eleve) pour compat
+  if (key === 'modere') key = 'modéré';
+  if (key === 'eleve') key = 'élevé';
   var r=RISK_LEVELS.find(function(x){return x.key===key;});
   return r?'<span class="badge '+r.badge+'">'+r.label+'</span>':'<span class="badge bpl">—</span>';
 }
@@ -1017,7 +1020,7 @@ function editRiskLevel(idx,val){
   PROCESSES[idx].riskLevel=val;
   PROCESSES[idx].risk=RISK_LEVELS.findIndex(function(r){return r.key===val;})+1||1;
   var p=PROCESSES[idx];
-  spUpsert('AF_Processes',p.id,{dom:p.dom,proc:p.proc,risk:p.risk,risk_level:val,archived:p.archived||false,Title:p.proc}).catch(console.warn);
+  spUpsert('AF_Processes',p.id,{dom:p.dom,proc:p.proc,risk:p.risk,risk_level:val,archived:p.archived||false,risks_json:JSON.stringify(p.risks||[]),risk_refs_json:JSON.stringify(p.riskRefs||[]),Title:p.proc}).catch(console.warn);
   addHist('edit','Risque "'+p.proc+'" modifié → '+val);
   toast('Risque mis à jour ✓');
 }
@@ -1025,7 +1028,7 @@ function editRiskLevel(idx,val){
 function archiveProc(idx){
   PROCESSES[idx].archived=true;
   var p=PROCESSES[idx];
-  spUpsert('AF_Processes',p.id,{dom:p.dom,proc:p.proc,risk:p.risk,risk_level:p.riskLevel||'faible',archived:true,Title:p.proc}).catch(console.warn);
+  spUpsert('AF_Processes',p.id,{dom:p.dom,proc:p.proc,risk:p.risk,risk_level:p.riskLevel||'faible',archived:true,risks_json:JSON.stringify(p.risks||[]),risk_refs_json:JSON.stringify(p.riskRefs||[]),Title:p.proc}).catch(console.warn);
   addHist('arch','Process "'+p.proc+'" archivé');
   renderProcTable();
   toast('Archivé ✓');
@@ -1075,7 +1078,7 @@ function showEditProcModal(idx){
       var riskKey=document.getElementById('m-risk').value;
       p.riskLevel=riskKey;
       p.risk=RISK_LEVELS.findIndex(function(r){return r.key===riskKey;})+1||1;
-      spUpsert('AF_Processes',p.id,{dom:p.dom,proc:p.proc,risk:p.risk,risk_level:p.riskLevel,archived:p.archived||false,Title:p.proc}).catch(console.warn);
+      spUpsert('AF_Processes',p.id,{dom:p.dom,proc:p.proc,risk:p.risk,risk_level:p.riskLevel,archived:p.archived||false,risks_json:JSON.stringify(p.risks||[]),risk_refs_json:JSON.stringify(p.riskRefs||[]),Title:p.proc}).catch(console.warn);
       addHist('edit','Process "'+p.proc+'" modifié');
       renderProcTable();
       toast('Mis à jour ✓');
@@ -4577,6 +4580,43 @@ function exportAuditPDF(auditId){
     +'</div>'
     +'</div>';
 
+  // ── Section Risques du processus ──────────────────────────
+  // Récupérer tous les risques URD associés aux processus de l'audit
+  var pids = (Array.isArray(ap.processIds) && ap.processIds.length) ? ap.processIds : (ap.processId ? [ap.processId] : []);
+  var seenRiskIds = {};
+  var auditRisks = [];
+  pids.forEach(function(pid){
+    var p = PROCESSES.find(function(x){return x.id===pid;});
+    if (!p) return;
+    var procName = p.proc;
+    (p.riskRefs||[]).forEach(function(rid){
+      if (seenRiskIds[rid]) return;
+      seenRiskIds[rid] = true;
+      var r = (RISK_UNIVERSE||[]).find(function(x){return x.id===rid;});
+      if (r) auditRisks.push(Object.assign({}, r, {_procName: procName}));
+    });
+  });
+
+  var risksHtml = '<div class="section">'
+    + '<div class="section-title">Risques du processus ('+auditRisks.length+')</div>';
+  if (auditRisks.length) {
+    var riskRows = auditRisks.map(function(r){
+      var typesStr = (r.impactTypes||[]).join(', ') || '—';
+      var impactColor = ({'Minor':'#059669','Limited':'#B45309','Major':'#DC2626','Severe':'#7F1D1D'})[r.impact] || '#6B7280';
+      return '<tr>'
+        + '<td style="font-weight:500">'+(r.title||'')+'</td>'
+        + '<td style="color:#6B7280;font-size:11px">'+(r.description||'—')+'</td>'
+        + '<td style="color:#6B7280">'+(r.probability||'—')+'</td>'
+        + '<td><span style="color:'+impactColor+';font-weight:600">'+(r.impact||'—')+'</span></td>'
+        + '<td style="color:#6B7280;font-size:11px">'+typesStr+'</td>'
+        + '</tr>';
+    }).join('');
+    risksHtml += '<table><thead><tr><th>Risque</th><th>Description</th><th>Probabilité</th><th>Impact</th><th>Types</th></tr></thead><tbody>'+riskRows+'</tbody></table>';
+  } else {
+    risksHtml += '<div style="color:#9CA3AF;font-size:12px;font-style:italic">Aucun risque associé au processus dans l\'Audit Universe.</div>';
+  }
+  risksHtml += '</div>';
+
   // ── Section Exec Summary ──────────────────────────────────
   var execHtml='<div class="section">'
     +'<div class="section-title">Exec Summary</div>'
@@ -4660,7 +4700,7 @@ function exportAuditPDF(auditId){
     +'<style>'+CSS+'</style></head><body>'
     +'<h1>Rapport d\'audit — '+ap.titre+'</h1>'
     +'<div class="gen">Généré le '+new Date().toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'})+'</div>'
-    +adminHtml+execHtml+ctrlHtml+targetHtml+findHtml
+    +adminHtml+risksHtml+execHtml+ctrlHtml+targetHtml+findHtml
     +'</body></html>';
 
   var w=window.open('','_blank');
