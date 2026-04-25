@@ -457,8 +457,7 @@ V['dashboard']=()=>{
   var yLate    = filtered.filter(function(a){return (a.statut||'').startsWith('En retard');});
   var closedPct= filtered.length?Math.round(yClosed.length/filtered.length*100):0;
 
-  // Toutes les stats pour le graphique (pas filtrées par statut)
-  // IMPORTANT : exclure les missions "Other" du donut (réservé aux Audits Process/BU)
+  // Toutes les stats Process + BU (pas Other)
   var forChart=AUDIT_PLAN.filter(function(a){
     return a.annee===_dbYear
       && a.type !== 'Other'
@@ -469,6 +468,33 @@ V['dashboard']=()=>{
   var cPlanned = forChart.filter(function(a){return (a.statut||'').startsWith('Planifié');}).length;
   var cLate    = forChart.filter(function(a){return (a.statut||'').startsWith('En retard');}).length;
   var cTotal   = forChart.length;
+
+  // ── Stats spécifiques pour les Process Audits uniquement ──
+  var processOnly = AUDIT_PLAN.filter(function(a){
+    return a.annee===_dbYear && a.type==='Process'
+      && (_dbAuditeur==='all'||(a.auditeurs||[]).includes(_dbAuditeur));
+  });
+  var pTotal = processOnly.length;
+
+  // Comptage par domaine (pour donut Process Audits par domaine)
+  var domCount = {};
+  processOnly.forEach(function(a){
+    var pids = (Array.isArray(a.processIds) && a.processIds.length) ? a.processIds : (a.processId ? [a.processId] : []);
+    var doms = new Set();
+    pids.forEach(function(pid){
+      var p = PROCESSES.find(function(x){return x.id===pid;});
+      if (p && p.dom) doms.add(p.dom);
+    });
+    doms.forEach(function(d){ domCount[d] = (domCount[d]||0) + 1; });
+  });
+
+  // Stats pour la nouvelle capsule "Missions par type"
+  var byType = {
+    Process: AUDIT_PLAN.filter(function(a){return a.annee===_dbYear && a.type==='Process' && (_dbAuditeur==='all'||(a.auditeurs||[]).includes(_dbAuditeur));}).length,
+    BU:      AUDIT_PLAN.filter(function(a){return a.annee===_dbYear && a.type==='BU' && (_dbAuditeur==='all'||(a.auditeurs||[]).includes(_dbAuditeur));}).length,
+    Other:   AUDIT_PLAN.filter(function(a){return a.annee===_dbYear && a.type==='Other' && (_dbAuditeur==='all'||(a.auditeurs||[]).includes(_dbAuditeur));}).length,
+  };
+  var totalAll = byType.Process + byType.BU + byType.Other;
 
   var lateActions=ACTIONS.filter(function(a){return a.status==='En retard';}).slice(0,3);
 
@@ -571,27 +597,74 @@ V['dashboard']=()=>{
   });
 
   // Construction HTML des 3 capsules
-  html += '<div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:1rem;">';
+  html += '<div style="display:grid;grid-template-columns:repeat(4, minmax(0, 1fr));gap:.875rem;">';
+
+  // ── CAPSULE 0 : Missions par type + donut statut ──
+  html += '<div class="card" style="padding:1rem;display:flex;flex-direction:column">';
+  html += '<div style="font-size:13px;font-weight:600;margin-bottom:.5rem;">Missions '+_dbYear+' ('+totalAll+')</div>';
+  // Compteur par type avec barres
+  var typeColors = {Process:'#5DCAA5', BU:'#EF9F27', Other:'#AFA9EC'};
+  var typeLabels = {Process:'Process', BU:'BU', Other:'Autres'};
+  ['Process','BU','Other'].forEach(function(t){
+    var pct = totalAll ? Math.round(byType[t]/totalAll*100) : 0;
+    html += '<div style="margin-bottom:6px">'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;font-size:10px;margin-bottom:2px">'
+        + '<span style="color:var(--text-2)">'+typeLabels[t]+'</span>'
+        + '<span style="font-weight:600">'+byType[t]+' <span style="color:var(--text-3);font-weight:400">('+pct+'%)</span></span>'
+      + '</div>'
+      + '<div style="height:5px;background:var(--bg);border-radius:3px;overflow:hidden">'
+        + '<div style="width:'+pct+'%;height:100%;background:'+typeColors[t]+';transition:width .3s"></div>'
+      + '</div>'
+      + '</div>';
+  });
+  // Petit donut statut en dessous
+  html += '<div style="margin-top:auto;padding-top:8px;border-top:.5px solid var(--border);display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
+  html += '<canvas id="db-donut2" width="70" height="70" style="flex-shrink:0"></canvas>';
+  html += '<div style="display:flex;flex-direction:column;gap:2px;font-size:9px;flex:1;min-width:0">';
+  html += '<div style="font-size:10px;color:var(--text-2);font-weight:600;margin-bottom:2px">Par statut</div>';
+  var statusItems = [
+    {label:'Clôturés', val: AUDIT_PLAN.filter(function(a){var s=(a.statut||'');return a.annee===_dbYear && (_dbAuditeur==='all'||(a.auditeurs||[]).includes(_dbAuditeur)) && (s.startsWith('Clôturé')||s.startsWith('Fait'));}).length, color:'#5DCAA5'},
+    {label:'En cours', val: AUDIT_PLAN.filter(function(a){return a.annee===_dbYear && (_dbAuditeur==='all'||(a.auditeurs||[]).includes(_dbAuditeur)) && (a.statut||'').startsWith('En cours');}).length, color:'#AFA9EC'},
+    {label:'Planifiés', val: AUDIT_PLAN.filter(function(a){return a.annee===_dbYear && (_dbAuditeur==='all'||(a.auditeurs||[]).includes(_dbAuditeur)) && (a.statut||'').startsWith('Planifié');}).length, color:'#EF9F27'},
+  ];
+  statusItems.forEach(function(si){
+    html+='<div style="display:flex;align-items:center;gap:4px;font-size:10px">'
+      +'<div style="width:6px;height:6px;border-radius:50%;background:'+si.color+';flex-shrink:0;"></div>'
+      +'<span style="color:var(--text-2)">'+si.label+'</span>'
+      +'<span style="font-weight:600;margin-left:auto">'+si.val+'</span>'
+      +'</div>';
+  });
+  html += '</div></div></div>';
 
   // ── CAPSULE 1 : Process + BU Audits (donut) ──
   html += '<div class="card" style="padding:1rem;">';
-  html += '<div style="font-size:13px;font-weight:600;margin-bottom:.5rem;">Process Audits '+_dbYear+'</div>';
+  // ── CAPSULE 1 : Process Audits par domaine ──
+  html += '<div class="card" style="padding:1rem;">';
+  html += '<div style="font-size:13px;font-weight:600;margin-bottom:.5rem;">Process Audits '+_dbYear+' ('+pTotal+')</div>';
   html += '<div style="display:flex;align-items:center;gap:.875rem;">';
   html += '<canvas id="db-donut" width="90" height="90" style="flex-shrink:0;"></canvas>';
   html += '<div style="display:flex;flex-direction:column;gap:4px;font-size:11px;flex:1;min-width:0;">';
-  var chartItems=[
-    {label:'Clôturés',val:cClosed,color:'#5DCAA5'},
-    {label:'En cours',val:cInProg,color:'#AFA9EC'},
-    {label:'Planifiés',val:cPlanned,color:'#EF9F27'},
-  ];
-  chartItems.forEach(function(ci){
-    var pct2=cTotal?Math.round(ci.val/cTotal*100):0;
-    html+='<div style="display:flex;align-items:center;gap:5px;">'
-      +'<div style="width:8px;height:8px;border-radius:50%;background:'+ci.color+';flex-shrink:0;"></div>'
-      +'<span style="color:var(--text-2);font-size:10px;">'+ci.label+'</span>'
-      +'<span style="font-weight:600;margin-left:auto;font-size:11px;white-space:nowrap;">'+ci.val+' <span style="font-weight:400;color:var(--text-3);">('+pct2+'%)</span></span>'
-      +'</div>';
-  });
+  // Construire les items à partir de domCount, palette de couleurs
+  var domPalette = ['#AFA9EC','#85B7EB','#5DCAA5','#EF9F27','#F0997B','#97C459','#C7B7E5','#8AC6F7','#F4B183','#A0D0A4'];
+  var domEntries = Object.keys(domCount).sort(function(a,b){return (a||'').localeCompare(b||'','fr',{sensitivity:'base'});});
+  var chartItems = [];
+  if (domEntries.length === 0) {
+    html += '<div style="font-size:11px;color:var(--text-3);font-style:italic">Aucun process audit cette année</div>';
+  } else {
+    domEntries.forEach(function(dom, i){
+      chartItems.push({label: dom, val: domCount[dom], color: domPalette[i % domPalette.length]});
+    });
+    chartItems.forEach(function(ci){
+      var pct2=pTotal?Math.round(ci.val/pTotal*100):0;
+      // Tronquer le nom de domaine si trop long
+      var lblShort = ci.label.length>20 ? ci.label.slice(0,18)+'…' : ci.label;
+      html+='<div style="display:flex;align-items:center;gap:5px;">'
+        +'<div style="width:8px;height:8px;border-radius:50%;background:'+ci.color+';flex-shrink:0;"></div>'
+        +'<span style="color:var(--text-2);font-size:10px;" title="'+ci.label+'">'+lblShort+'</span>'
+        +'<span style="font-weight:600;margin-left:auto;font-size:11px;white-space:nowrap;">'+ci.val+' <span style="font-weight:400;color:var(--text-3);">('+pct2+'%)</span></span>'
+        +'</div>';
+    });
+  }
   html += '</div></div></div>';
 
   // ── CAPSULE 2 : BU Audits ──
@@ -678,34 +751,62 @@ I['dashboard']=function(){
       notifBar.style.display='none';
     }
   }
-  // Dessiner le donut après rendu
+  // Dessiner le donut après rendu (Process Audits par domaine)
   setTimeout(function(){
     var canvas=document.getElementById('db-donut');
     if(!canvas) return;
     var CY=window._dbYear||2026;
     var DA=window._dbAuditeur||'all';
-    // Exclure les missions "Other" (même logique que le calcul dans la vue)
-    var forChart=AUDIT_PLAN.filter(function(a){
-      return a.annee===CY && a.type !== 'Other'
+    // Process Audits uniquement
+    var processOnly = AUDIT_PLAN.filter(function(a){
+      return a.annee===CY && a.type==='Process'
         && (DA==='all'||(a.auditeurs||[]).includes(DA));
     });
-    var cClosed  = forChart.filter(function(a){return (a.statut||'').startsWith('Clôturé');}).length;
-    var cInProg  = forChart.filter(function(a){return (a.statut||'').startsWith('En cours');}).length;
-    var cPlanned = forChart.filter(function(a){return (a.statut||'').startsWith('Planifié');}).length;
-    var total    = cClosed+cInProg+cPlanned;
-    if(!total) return;
-    var segments=[
-      {val:cClosed, color:'#5DCAA5'},
-      {val:cInProg, color:'#AFA9EC'},
-      {val:cPlanned,color:'#EF9F27'},
-    ];
+    var pTot = processOnly.length;
+    // Comptage par domaine
+    var domCount = {};
+    processOnly.forEach(function(a){
+      var pids = (Array.isArray(a.processIds) && a.processIds.length) ? a.processIds : (a.processId ? [a.processId] : []);
+      var doms = new Set();
+      pids.forEach(function(pid){
+        var p = PROCESSES.find(function(x){return x.id===pid;});
+        if (p && p.dom) doms.add(p.dom);
+      });
+      doms.forEach(function(d){ domCount[d] = (domCount[d]||0) + 1; });
+    });
+    var domEntries = Object.keys(domCount).sort(function(a,b){return (a||'').localeCompare(b||'','fr',{sensitivity:'base'});});
+    var palette = ['#AFA9EC','#85B7EB','#5DCAA5','#EF9F27','#F0997B','#97C459','#C7B7E5','#8AC6F7','#F4B183','#A0D0A4'];
+    var totalForDonut = 0;
+    var segments = domEntries.map(function(d, i){
+      totalForDonut += domCount[d];
+      return {val:domCount[d], color:palette[i % palette.length]};
+    });
     var ctx=canvas.getContext('2d');
     var W=90, cx=W/2, cy=W/2, r=42, inner=26;
     var start=-Math.PI/2;
     ctx.clearRect(0,0,W,W);
+    if (totalForDonut === 0) {
+      // Anneau gris si aucune donnée
+      ctx.beginPath();
+      ctx.arc(cx,cy,r,0,2*Math.PI);
+      ctx.fillStyle='#E5E5EE';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(cx,cy,inner,0,2*Math.PI);
+      ctx.fillStyle='#fff';
+      ctx.fill();
+      ctx.fillStyle='#9C9A92';
+      ctx.font='600 14px -apple-system,system-ui,sans-serif';
+      ctx.textAlign='center';
+      ctx.textBaseline='middle';
+      ctx.fillText('0',cx,cy-3);
+      ctx.font='9px -apple-system,system-ui,sans-serif';
+      ctx.fillText('audits',cx,cy+9);
+      return;
+    }
     segments.forEach(function(s){
       if(!s.val) return;
-      var slice=2*Math.PI*(s.val/total);
+      var slice=2*Math.PI*(s.val/totalForDonut);
       ctx.beginPath();
       ctx.moveTo(cx,cy);
       ctx.arc(cx,cy,r,start,start+slice);
@@ -724,10 +825,65 @@ I['dashboard']=function(){
     ctx.font='600 15px -apple-system,system-ui,sans-serif';
     ctx.textAlign='center';
     ctx.textBaseline='middle';
-    ctx.fillText(total,cx,cy-5);
+    ctx.fillText(pTot, cx, cy-5);
     ctx.font='9px -apple-system,system-ui,sans-serif';
     ctx.fillStyle='#9C9A92';
-    ctx.fillText('audits',cx,cy+8);
+    ctx.fillText('audits', cx, cy+8);
+  },60);
+
+  // Dessiner le 2e donut "Missions par type" par statut
+  setTimeout(function(){
+    var canvas2=document.getElementById('db-donut2');
+    if(!canvas2) return;
+    var CY=window._dbYear||2026;
+    var DA=window._dbAuditeur||'all';
+    var allMissions = AUDIT_PLAN.filter(function(a){
+      return a.annee===CY && (DA==='all'||(a.auditeurs||[]).includes(DA));
+    });
+    var sClosed  = allMissions.filter(function(a){var s=(a.statut||'');return s.startsWith('Clôturé')||s.startsWith('Fait');}).length;
+    var sInProg  = allMissions.filter(function(a){return (a.statut||'').startsWith('En cours');}).length;
+    var sPlanned = allMissions.filter(function(a){return (a.statut||'').startsWith('Planifié');}).length;
+    var totS = sClosed + sInProg + sPlanned;
+    var segs = [
+      {val:sClosed, color:'#5DCAA5'},
+      {val:sInProg, color:'#AFA9EC'},
+      {val:sPlanned, color:'#EF9F27'},
+    ];
+    var ctx=canvas2.getContext('2d');
+    var W=70, cx=W/2, cy=W/2, r=32, inner=20;
+    var start=-Math.PI/2;
+    ctx.clearRect(0,0,W,W);
+    if (totS === 0) {
+      ctx.beginPath();
+      ctx.arc(cx,cy,r,0,2*Math.PI);
+      ctx.fillStyle='#E5E5EE';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(cx,cy,inner,0,2*Math.PI);
+      ctx.fillStyle='#fff';
+      ctx.fill();
+      return;
+    }
+    segs.forEach(function(s){
+      if(!s.val) return;
+      var slice=2*Math.PI*(s.val/totS);
+      ctx.beginPath();
+      ctx.moveTo(cx,cy);
+      ctx.arc(cx,cy,r,start,start+slice);
+      ctx.closePath();
+      ctx.fillStyle=s.color;
+      ctx.fill();
+      start+=slice;
+    });
+    ctx.beginPath();
+    ctx.arc(cx,cy,inner,0,2*Math.PI);
+    ctx.fillStyle='#fff';
+    ctx.fill();
+    ctx.fillStyle='#1A1A18';
+    ctx.font='600 13px -apple-system,system-ui,sans-serif';
+    ctx.textAlign='center';
+    ctx.textBaseline='middle';
+    ctx.fillText(totS, cx, cy);
   },60);
 };
 
@@ -775,10 +931,10 @@ function renderProcTable(){
       rows.sort(function(a,b){
         return (a.proc||'').localeCompare(b.proc||'', 'fr', {sensitivity:'base'});
       });
-      // Ligne de section domaine
+      // Ligne de section domaine — colspan=4 (toutes les colonnes)
       var domIdx=PROCESSES.findIndex(function(p){return p.dom===dom;});
       h+='<tr class="sr">';
-      h+='<td colspan="'+(CU&&CU.role==='admin'?'4':'3')+'" style="display:flex;align-items:center;justify-content:space-between">';
+      h+='<td colspan="4" style="display:flex;align-items:center;justify-content:space-between;width:100%">';
       h+='<span>'+dom+'</span>';
       if(CU&&CU.role==='admin'){
         h+='<button class="bs" style="font-size:10px;padding:2px 7px" onclick="showRenameDomainModal(\''+_escQ(dom)+'\')">Renommer</button>';
@@ -1358,7 +1514,7 @@ function auditModalBody(ap){
     ? ap.processIds
     : (ap && ap.processId ? [ap.processId] : []);
 
-  // Liste des checkboxes groupées par domaine
+  // Liste des processus en GRILLE (1 colonne par domaine, processus en dessous)
   var procListHtml = '';
   if (doms.length) {
     procListHtml = doms.map(function(dom){
@@ -1372,25 +1528,73 @@ function auditModalBody(ap){
           + '<span>'+p.proc+'</span>'
           + '</label>';
       }).join('');
-      return '<div style="margin-bottom:10px">'
-        + '<div style="font-size:10px;font-weight:600;color:var(--purple-dk);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;padding-bottom:3px;border-bottom:.5px solid var(--border)">'+dom+'</div>'
-        + '<div>'+items+'</div>'
+      return '<div class="m-dom-col">'
+        + '<div class="m-dom-title">'+dom+'</div>'
+        + '<div class="m-dom-procs">'+items+'</div>'
         + '</div>';
     }).join('');
   } else {
     procListHtml = '<div style="font-size:11px;color:var(--text-3);padding:.5rem">Aucun processus défini. Créez-en d\'abord dans Audit Universe.</div>';
   }
 
+  // Liste des Product Lines actuellement scopées sur cet audit
+  var currentPLs = (ap && Array.isArray(ap.productLineIds)) ? ap.productLineIds : [];
+  var hasPLScope = currentPLs.length > 0 || (ap && ap.plScopeEnabled);
+
+  // Section Product Lines (en grille SBS / AXW)
+  var plListHtml = '';
+  if (PRODUCT_LINES && PRODUCT_LINES.length) {
+    var plBySoc = { SBS: [], AXW: [] };
+    PRODUCT_LINES.forEach(function(pl){
+      if (pl.society === 'SBS') plBySoc.SBS.push(pl);
+      else if (pl.society === 'AXW') plBySoc.AXW.push(pl);
+    });
+    ['SBS','AXW'].forEach(function(soc){
+      var list = plBySoc[soc].sort(function(a,b){return (a.name||'').localeCompare(b.name||'','fr',{sensitivity:'base'});});
+      if (!list.length) return;
+      var items = list.map(function(pl){
+        var checked = currentPLs.indexOf(pl.id)>=0 ? ' checked' : '';
+        return '<label>'
+          + '<input type="checkbox" class="m-pl-cb" value="'+pl.id+'"'+checked+'>'
+          + '<span>'+pl.name+'</span>'
+          + '</label>';
+      }).join('');
+      plListHtml += '<div class="m-dom-col">'
+        + '<div class="m-dom-title" style="color:'+(soc==='SBS'?'#085041':'#0C447C')+'">'+soc+'</div>'
+        + '<div class="m-dom-procs">'+items+'</div>'
+        + '</div>';
+    });
+    if (!plListHtml) plListHtml = '<div style="font-size:11px;color:var(--text-3);padding:.5rem">Aucune Product Line définie.</div>';
+  } else {
+    plListHtml = '<div style="font-size:11px;color:var(--text-3);padding:.5rem">Aucune Product Line définie. Créez-en dans l\'onglet Product Lines.</div>';
+  }
+
   var h='';
   h+='<div><label>Type de mission</label><select id="m-type" onchange="toggleAuditTypeFields(this.value)"><option value="Process"'+(type==='Process'?' selected':'')+'>Process Audit</option><option value="BU"'+(type==='BU'?' selected':'')+'>BU Audit</option><option value="Other"'+(type==='Other'?' selected':'')+'>Autre mission</option></select></div>';
+
+  // Fields PROCESS — process en grille + Product Lines (scope)
   h+='<div id="m-proc-fields" style="'+(type!=='Process'?'display:none':'')+'">';
   h+='<div><label>Processus couverts <span style="color:var(--red)">*</span></label>';
   h+='<div style="font-size:10px;color:var(--text-3);margin-bottom:5px">Cochez un ou plusieurs processus (multi-domaines autorisés)</div>';
-  h+='<div id="m-proc-list" style="max-height:220px;overflow-y:auto;border:.5px solid var(--border);border-radius:var(--radius);padding:8px 10px;background:var(--bg-card)">'
+  h+='<div id="m-proc-list" class="m-proc-grid">'
     + procListHtml
     + '</div>';
   h+='<div id="m-proc-count" style="font-size:11px;color:var(--purple);margin-top:5px;font-weight:500"></div>';
-  h+='</div></div>';
+  h+='</div>';
+  // Section Product Lines (radio Oui/Non)
+  h+='<div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border)">';
+  h+='<label>Product Lines scopées</label>';
+  h+='<div style="font-size:10px;color:var(--text-3);margin-bottom:5px">Si l\'audit ne couvre qu\'une partie des Product Lines, indiquez lesquelles</div>';
+  h+='<div style="display:flex;gap:14px;margin-bottom:8px">';
+  h+='<label style="display:inline-flex !important;flex-direction:row !important;align-items:center !important;gap:5px !important;width:auto !important;padding:0 !important"><input type="radio" name="m-pl-scope" value="no" style="width:auto !important"'+(!hasPLScope?' checked':'')+'> Non</label>';
+  h+='<label style="display:inline-flex !important;flex-direction:row !important;align-items:center !important;gap:5px !important;width:auto !important;padding:0 !important"><input type="radio" name="m-pl-scope" value="yes" style="width:auto !important"'+(hasPLScope?' checked':'')+'> Oui</label>';
+  h+='</div>';
+  h+='<div id="m-pl-list-wrapper" style="'+(!hasPLScope?'display:none':'')+'">';
+  h+='<div id="m-pl-list" class="m-proc-grid" style="grid-template-columns:repeat(2,1fr)">'+plListHtml+'</div>';
+  h+='</div>';
+  h+='</div>';
+  h+='</div>';
+
   h+='<div id="m-bu-fields" style="'+(type!=='BU'?'display:none':'')+'">';
   h+='<div><label>Région</label><select id="m-reg">';
   var allRegs=[];
@@ -1551,11 +1755,23 @@ function collectAuditModal(){
     // Domaine : si cross-domaines, on met "Multi-domaines", sinon le domaine unique
     var uniqueDoms = [...new Set(procObjs.map(function(p){return p.dom;}))];
     var domaine = uniqueDoms.length === 1 ? uniqueDoms[0] : uniqueDoms.join(', ');
+
+    // Collecter les Product Lines scopées (si radio Oui)
+    var plScopeRadio = document.querySelector('input[name="m-pl-scope"]:checked');
+    var plScopeYes = plScopeRadio && plScopeRadio.value === 'yes';
+    var productLineIds = [];
+    if (plScopeYes) {
+      var plCbs = document.querySelectorAll('.m-pl-cb:checked');
+      productLineIds = Array.from(plCbs).map(function(cb){return cb.value;});
+    }
+
     return Object.assign({}, base, {
       domaine: domaine,
       process: procNames,
       processId: processIds[0],        // compat ancien champ (premier process)
       processIds: processIds,          // nouveau tableau complet
+      productLineIds: productLineIds,  // NOUVEAU — Product Lines scopées
+      plScopeEnabled: plScopeYes,      // NOUVEAU — flag (utile si 0 PL coché mais radio Oui)
     });
   } else if (type==='Other') {
     // Collecter catégorie et description
@@ -1588,7 +1804,7 @@ function showAddAuditModal(){
     await saveAuditPlan(newAp);
     addHist('add','Audit "'+data.titre+'" ajouté au plan');
     renderPlanAuditTable();toast('Audit créé ✓');
-  });
+  }, {wide:true});
   attachProcCheckboxListeners();
 }
 function showEditAuditModal(idx){
@@ -1599,7 +1815,7 @@ function showEditAuditModal(idx){
     await saveAuditPlan(AUDIT_PLAN[idx]);
     addHist('edit','Audit "'+data.titre+'" modifié');
     renderPlanAuditTable();toast('Audit mis à jour ✓');
-  });
+  }, {wide:true});
   attachProcCheckboxListeners();
 }
 
@@ -1626,6 +1842,15 @@ function attachProcCheckboxListeners() {
         }
       });
     }
+
+    // Listener pour le radio Product Lines scopées Oui/Non
+    var plRadios = document.querySelectorAll('input[name="m-pl-scope"]');
+    var plWrapper = document.getElementById('m-pl-list-wrapper');
+    plRadios.forEach(function(r){
+      r.addEventListener('change', function(){
+        if (plWrapper) plWrapper.style.display = (r.checked && r.value==='yes') ? 'block' : (r.value==='no' && r.checked ? 'none' : plWrapper.style.display);
+      });
+    });
   }, 50);
 }
 async function deleteAudit(idx){
@@ -1985,9 +2210,15 @@ function renderBUTable(){
 V['planification']=()=>`
   <div class="topbar"><div class="tbtitle">Planification</div></div>
   <div class="content">
-    <div style="display:flex;gap:8px;margin-bottom:1rem">
-      <select id="f-pl" onchange="renderGantt()"><option value="all">Process + BU</option><option value="Process">Process</option><option value="BU">BU</option></select>
+    <div style="display:flex;gap:8px;margin-bottom:1rem;align-items:center">
+      <select id="f-pl" onchange="renderGantt()">
+        <option value="all">Toutes missions</option>
+        <option value="Process">Process</option>
+        <option value="BU">BU</option>
+        <option value="Other">Autres</option>
+      </select>
       <select id="f-pyr" onchange="renderGantt()"><option value="all">Toutes années</option><option value="2025" selected>2025</option><option value="2026">2026</option><option value="2027">2027</option><option value="2028">2028</option></select>
+      ${CU&&CU.role==='admin'?'<span style="font-size:10px;color:var(--text-3);font-style:italic;margin-left:auto">💡 Double-cliquez sur un audit pour le modifier</span>':''}
     </div>
     <div class="gw" id="gantt-wrap"></div>
   </div>`;
@@ -2001,10 +2232,20 @@ function renderGantt(){
   var curMonth=new Date().getMonth();
   var months=MO.map(function(m,mi){return'<div class="gc'+(mi===curMonth?' today-col':'')+'" style="font-size:11px;text-align:center;padding:4px 0;'+(mi===curMonth?'background:rgba(83,74,183,0.08);font-weight:600':'')+'">'+ m+'</div>';}).join('');
   var hdr='<div class="gr gw" style="border-bottom:.5px solid var(--border)"><div class="gc" style="text-align:left;padding-left:8px;font-size:11px;font-weight:500">Audit</div>'+months+'</div>';
-  var body=rows.map(function(a,idx){
+  var isAdmin = CU && CU.role==='admin';
+  var body=rows.map(function(a){
+    var realIdx = AUDIT_PLAN.indexOf(a);
     var start=a.dateDebut?parseInt(a.dateDebut)-1:-1;
     var end=a.dateFin?parseInt(a.dateFin)-1:-1;
     var hasDate=start>=0&&end>=0;
+    // Couleur de la barre : par défaut palette GC, mais pour les missions Other, on prend la couleur de la catégorie
+    var barColor;
+    if (a.type==='Other' && a.categorie) {
+      var catColors = (typeof getOtherCategoryColors==='function') ? getOtherCategoryColors(a.categorie) : null;
+      barColor = catColors && catColors.gantt ? catColors.gantt : '#6B7280';
+    } else {
+      barColor = GC[realIdx%GC.length];
+    }
     var cells=MO.map(function(_,m){
       var isToday=m===curMonth;
       var inRange=hasDate&&m>=start&&m<=end;
@@ -2013,15 +2254,16 @@ function renderGantt(){
       var bar='';
       if(inRange){
         var radius=isFirst&&isLast?'4px':isFirst?'4px 0 0 4px':isLast?'0 4px 4px 0':'0';
-        bar='<div class="gb" style="background:'+GC[idx%GC.length]+';border-radius:'+radius+';height:22px;margin:2px 1px;display:flex;align-items:center;justify-content:center">'+(isFirst?'<span style="font-size:9px;color:rgba(0,0,0,0.5);padding-left:4px">'+MO[start]+'</span>':'')+'</div>';
+        bar='<div class="gb" style="background:'+barColor+';border-radius:'+radius+';height:22px;margin:2px 1px;display:flex;align-items:center;justify-content:center">'+(isFirst?'<span style="font-size:9px;color:rgba(0,0,0,0.5);padding-left:4px">'+MO[start]+'</span>':'')+'</div>';
       }
       return'<div class="gm'+(isToday?' td':'')+'" style="'+(isToday?'background:rgba(83,74,183,0.05)':'')+'">'+bar+'</div>';
     }).join('');
-    var bdg=a.type==='Process'?'bpc':'bbu';
-    var label=a.type==='Process'?'P':'BU';
-    var title=a.titre.length>18?a.titre.slice(0,17)+'…':a.titre;
+    var bdg = a.type==='Process'?'bpc':(a.type==='BU'?'bbu':'bpl');
+    var label = a.type==='Process'?'P':(a.type==='BU'?'BU':'A');
+    var title=a.titre.length>22?a.titre.slice(0,21)+'…':a.titre;
     var noDate=!hasDate?'<span style="font-size:9px;color:#bbb;margin-left:4px">dates non définies</span>':'';
-    return'<div class="gr" style="border-bottom:.5px solid var(--border)"><div class="gn2" style="display:flex;align-items:center;gap:5px"><span class="badge '+bdg+'" style="font-size:9px;padding:1px 5px;flex-shrink:0">'+label+'</span><span style="font-size:11px">'+title+'</span>'+noDate+'</div>'+cells+'</div>';
+    var dblClickAttr = isAdmin ? ' ondblclick="showEditAuditModal('+realIdx+')" style="cursor:pointer" title="Double-cliquez pour modifier"' : '';
+    return'<div class="gr ga-row" data-audit-idx="'+realIdx+'"'+dblClickAttr+' style="border-bottom:.5px solid var(--border)"><div class="gn2" style="display:flex;align-items:center;gap:5px"><span class="badge '+bdg+'" style="font-size:9px;padding:1px 5px;flex-shrink:0">'+label+'</span><span style="font-size:11px">'+title+'</span>'+noDate+'</div>'+cells+'</div>';
   }).join('');
   document.getElementById('gantt-wrap').innerHTML=hdr+(body||'<div style="padding:2rem;color:#aaa;text-align:center;font-size:12px">Aucun audit pour cette période</div>');
 }
