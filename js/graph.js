@@ -260,12 +260,12 @@ var LIST_SCHEMAS = {
   ],
   AF_RiskUniverse: [
     {name:'af_id',text:{}},{name:'level',text:{}},{name:'parent_id',text:{}},
-    {name:'title',text:{}},{name:'description',text:{}},
+    {name:'risk_title',text:{}},{name:'description',text:{}},
     {name:'probability',text:{}},{name:'impact',text:{}},
     {name:'impact_types_json',text:{}},
   ],
   AF_ProductLines: [
-    {name:'af_id',text:{}},{name:'name',text:{}},{name:'society',text:{}},
+    {name:'af_id',text:{}},{name:'pl_name',text:{}},{name:'society',text:{}},
     {name:'countries_json',text:{}},{name:'description',text:{}},
   ],
   AF_Config: [
@@ -427,7 +427,7 @@ async function loadAllData() {
         return {
           id: f.af_id, level: f.level || 'group',
           parentId: f.parent_id || '',
-          title: f.title || f.Title || '',
+          title: f.risk_title || f.title || f.Title || '',
           description: f.description || '',
           probability: f.probability || '',
           impact: f.impact || '',
@@ -442,7 +442,7 @@ async function loadAllData() {
       PRODUCT_LINES = plRaw.map(function(r){
         var f = r.fields;
         return {
-          id: f.af_id, name: f.name || f.Title || '',
+          id: f.af_id, name: f.pl_name || f.name || f.Title || '',
           society: f.society || '',
           countries: tryParse(f.countries_json, []),
           description: f.description || '',
