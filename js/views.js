@@ -2818,29 +2818,100 @@ V['roles']=()=>`
   <div class="topbar"><div class="tbtitle">Rôles & Accès</div><button class="bp" onclick="showInviteModal()">+ Inviter</button></div>
   <div class="content">
     ${PENDING.length?('<div style="margin-bottom:1rem"><div class="st" style="margin-bottom:.5rem">Demandes en attente ('+PENDING.length+')</div>'+PENDING.map(function(u,pi){return'<div class="card" style="margin-bottom:6px;display:flex;align-items:center;gap:10px"><div style="flex:1"><div style="font-size:12px;font-weight:500">'+u.name+'</div><div style="font-size:11px;color:var(--text-2)">'+u.email+'</div></div><button class="bp" style="font-size:11px" onclick="approveUser('+pi+')">Valider</button><button class="bd" style="font-size:11px" onclick="rejectUser('+pi+')">Refuser</button></div>';}).join('')+'</div>'):''}
-    <div class="tw"><table><thead><tr><th>Membre</th><th>Email</th><th>Rôle</th><th>Statut</th><th>Modifier</th></tr></thead><tbody id="utbl"></tbody></table></div>
+    <div class="tw"><table><thead><tr><th>Membre</th><th>Email @74software.com</th><th>Email @axway.com</th><th>Rôle</th><th>Statut</th><th>Modifier</th></tr></thead><tbody id="utbl"></tbody></table></div>
     <div class="card" style="margin-top:1rem;font-size:12px;color:var(--text-2);line-height:1.8">
       <strong>Admin / Directeur</strong> — accès complet, validation des étapes, gestion du Plan Audit et des utilisateurs.<br>
-      <strong>Auditrice</strong> — accès à ses audits assignés, remplissage des tâches, contrôles, findings et documents.
+      <strong>Auditrice</strong> — accès à ses audits assignés, remplissage des tâches, contrôles, findings et documents.<br>
+      <strong>Viewer</strong> — accès en lecture seule.
     </div>
   </div>`;
 I['roles']=()=>renderUsersTbl();
 
+// Regroupe les utilisateurs par nom (fusionne les alias @74software.com et @axway.com)
+function groupUsersByName(){
+  var byName = {};
+  (USERS||[]).forEach(function(u){
+    var key = (u.name||'').trim().toLowerCase();
+    if (!byName[key]) {
+      byName[key] = {
+        name: u.name,
+        email74: '',
+        emailAxway: '',
+        emailOther: '',
+        role: u.role || 'auditeur',
+        status: u.status || 'actif',
+        userIds: [], // tous les af_id liés à cette personne
+      };
+    }
+    var entry = byName[key];
+    entry.userIds.push(u.id);
+    var email = (u.email||'').toLowerCase();
+    if (email.indexOf('@74software.com')>=0) entry.email74 = u.email;
+    else if (email.indexOf('@axway.com')>=0) entry.emailAxway = u.email;
+    else if (email) entry.emailOther = u.email;
+    // Si conflit de rôle entre alias, on garde admin > auditeur > viewer
+    var rolePrio = {admin:3, auditeur:2, viewer:1, audite:1};
+    if ((rolePrio[u.role]||0) > (rolePrio[entry.role]||0)) entry.role = u.role;
+  });
+  return Object.values(byName).sort(function(a,b){return (a.name||'').localeCompare(b.name||'','fr',{sensitivity:'base'});});
+}
+
 function renderUsersTbl(){
-  var RL={admin:'Admin / Directeur',auditeur:'Auditrice',audite:'Audité'};
-  var RB={admin:'bpc',auditeur:'bdn',audite:'btg'};
-  document.getElementById('utbl').innerHTML=USERS.map(function(u,i){
-    return'<tr><td style="font-weight:500">'+u.name+'</td><td style="color:var(--text-2);font-size:11px">'+u.email+'</td>'
-      +'<td><span class="badge '+(RB[u.role]||'bpl')+'">'+(RL[u.role]||u.role)+'</span></td>'
-      +'<td><span style="font-size:11px;color:var(--green)">● '+u.status+'</span></td>'
-      +'<td><select style="font-size:11px;padding:3px 7px;border:.5px solid var(--border-md);border-radius:var(--radius);background:var(--bg-card)" onchange="changeRole('+i+',this.value)">'
-      +'<option value="admin" '+(u.role==='admin'?'selected':'')+'>Admin / Directeur</option>'
-      +'<option value="auditeur" '+(u.role==='auditeur'?'selected':'')+'>Auditrice</option>'
-      +'<option value="audite" '+(u.role==='audite'?'selected':'')+'>Audité</option>'
+  var RL={admin:'Admin / Directeur',auditeur:'Auditrice',audite:'Audité',viewer:'Viewer'};
+  var RB={admin:'bpc',auditeur:'bdn',audite:'btg',viewer:'bpl'};
+  var grouped = groupUsersByName();
+  document.getElementById('utbl').innerHTML = grouped.map(function(p, i){
+    var emptyMail = '<span style="color:var(--text-3);font-size:11px;font-style:italic">—</span>';
+    return'<tr>'
+      +'<td style="font-weight:500">'+p.name+'</td>'
+      +'<td style="color:var(--text-2);font-size:11px">'+(p.email74 || emptyMail)+'</td>'
+      +'<td style="color:var(--text-2);font-size:11px">'+(p.emailAxway || emptyMail)+(p.emailOther && !p.email74 && !p.emailAxway ? ' '+p.emailOther : '')+'</td>'
+      +'<td><span class="badge '+(RB[p.role]||'bpl')+'">'+(RL[p.role]||p.role)+'</span></td>'
+      +'<td><span style="font-size:11px;color:var(--green)">● '+p.status+'</span></td>'
+      +'<td><select style="font-size:11px;padding:3px 7px;border:.5px solid var(--border-md);border-radius:var(--radius);background:var(--bg-card)" onchange="changeRoleByName('+i+',this.value)">'
+      +'<option value="admin" '+(p.role==='admin'?'selected':'')+'>Admin / Directeur</option>'
+      +'<option value="auditeur" '+(p.role==='auditeur'?'selected':'')+'>Auditrice</option>'
+      +'<option value="viewer" '+(p.role==='viewer'?'selected':'')+'>Viewer</option>'
       +'</select></td></tr>';
   }).join('');
 }
-function changeRole(i,r){USERS[i].role=r;renderUsersTbl();toast('Rôle mis à jour');}
+
+// Change le rôle pour TOUS les alias d'un même nom (fusion)
+async function changeRoleByName(groupedIdx, newRole){
+  var grouped = groupUsersByName();
+  var entry = grouped[groupedIdx];
+  if (!entry) return;
+  // Mettre à jour tous les USERS qui ont l'un de ces userIds
+  var updated = 0;
+  for (var i=0; i<USERS.length; i++) {
+    if (entry.userIds.indexOf(USERS[i].id) >= 0) {
+      USERS[i].role = newRole;
+      updated++;
+      // Sauvegarder dans SharePoint
+      try {
+        await spUpsert('AF_Users', USERS[i].id, {
+          email: USERS[i].email||'',
+          name: USERS[i].name||'',
+          role: newRole,
+          initials: USERS[i].initials||'',
+          status: USERS[i].status||'actif',
+          source: USERS[i].source||'sso',
+          Title: USERS[i].name||USERS[i].email,
+        });
+      } catch(e){ console.warn('[Roles] save error:', e.message); }
+    }
+  }
+  addHist('edit', 'Rôle de '+entry.name+' changé en '+newRole+' ('+updated+' alias)');
+  renderUsersTbl();
+  toast('Rôle mis à jour ('+updated+' alias) ✓');
+}
+
+// Conservée pour compat (ancien appel direct par index USERS)
+function changeRole(i,r){
+  if (USERS[i]) USERS[i].role=r;
+  renderUsersTbl();
+  toast('Rôle mis à jour');
+}
 function approveUser(i){var u=PENDING[i];u.status='actif';USERS.push(u);PENDING.splice(i,1);addHist('add','Accès validé pour '+u.name);nav('roles');toast('Accès accordé à '+u.name+' ✓');}
 function rejectUser(i){var u=PENDING[i];PENDING.splice(i,1);addHist('del','Demande refusée pour '+u.name);nav('roles');toast('Refusé');}
 function showInviteModal(){
