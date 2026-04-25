@@ -226,6 +226,7 @@ var LIST_SCHEMAS = {
     {name:'entite',text:{}},{name:'region',text:{}},{name:'pays',text:{}},
     {name:'date_debut',text:{}},{name:'date_fin',text:{}},{name:'step_num',number:{}},
     {name:'categorie',text:{}},{name:'description',text:{}},
+    {name:'product_line_ids_json',text:{}},{name:'pl_scope_enabled',text:{}},
   ],
   AF_Processes: [
     {name:'af_id',text:{}},{name:'dom',text:{}},{name:'proc',text:{}},
@@ -377,6 +378,8 @@ async function loadAllData() {
         step:f.step_num!=null&&f.step_num!==undefined?parseInt(f.step_num):undefined,
         categorie:f.categorie||'',     // NOUVEAU — pour les missions "Other"
         description:f.description||'', // NOUVEAU — description libre
+        productLineIds: tryParse(f.product_line_ids_json, []),
+        plScopeEnabled: f.pl_scope_enabled === 'true' || f.pl_scope_enabled === true,
       };
     });
 
@@ -515,6 +518,8 @@ async function saveAuditPlan(ap) {
     date_debut:ap.dateDebut||'', date_fin:ap.dateFin||'',
     step_num:ap.step!==undefined?ap.step:null, Title:ap.titre,
     categorie:ap.categorie||'', description:ap.description||'',
+    product_line_ids_json: JSON.stringify(ap.productLineIds||[]),
+    pl_scope_enabled: ap.plScopeEnabled ? 'true' : 'false',
   });
 }
 
