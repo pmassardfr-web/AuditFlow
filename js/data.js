@@ -53,32 +53,6 @@ var RISK_IMPACT_COLORS = {
 // ══════════════════════════════════════════════════════════════
 var PRODUCT_LINES = [];
 
-// ══════════════════════════════════════════════════════════════
-//  CONTROLS LIBRARY : Référentiel de contrôles standards (COSO, COBIT, ITGC...)
-//  [{id, framework, domain, code, name, description, wcgwTypical, nature,
-//    frequency, key, designDefault, ownerType, testProcedures, appliesToDomains, archived}]
-// ══════════════════════════════════════════════════════════════
-var CONTROLS_LIBRARY = [];
-
-// Frameworks supportés (référentiels)
-var CONTROL_FRAMEWORKS = ['COSO 2013', 'COBIT 2019', 'ITGC', 'SOX', 'ISO 27001', 'RGPD', 'NIST CSF', 'Custom'];
-
-// Domaines de contrôles standard (catégorisation transversale)
-var CONTROL_DOMAINS = [
-  'Financial Reporting',
-  'IT General Controls',
-  'Cyber Security',
-  'Access Management',
-  'Change Management',
-  'Procurement',
-  'Human Resources',
-  'Compliance & Legal',
-  'Operations',
-  'Data Privacy',
-  'Vendor Management',
-  'Business Continuity',
-];
-
 // Catégories par défaut pour les missions "Other" (non-audit)
 // Les utilisateurs peuvent en ajouter de nouvelles à la volée dans le formulaire
 var OTHER_CATEGORIES_DEFAULT = [
@@ -131,13 +105,12 @@ const ENT={sbs:'<span class="badge bsbs">SBS</span>',axw:'<span class="badge bax
 
 let CU=null,CV='dashboard',CA=null,CS=0,CT='roles';
 
-// L'authentification passe par Microsoft Entra ID (MSAL).
-// Aucun mot de passe n'est stocké côté application.
 var USERS=[
-  {id:'pm',name:'Philippe M.',email:'pmassard@74software.com',role:'admin',status:'actif',organization_id:'00000000-0000-0000-0000-000000000001'},
-  {id:'sh',name:'Selma H.',email:'shentabli@74software.com',role:'auditeur',status:'actif',organization_id:'00000000-0000-0000-0000-000000000001'},
-  {id:'ne',name:'Nisrine E.',email:'nechah@74software.com',role:'auditeur',status:'actif',organization_id:'00000000-0000-0000-0000-000000000001'},
-  {id:'superadmin',name:'Super Admin',email:'pmassard.fr@gmail.com',role:'superadmin',status:'actif',organization_id:'00000000-0000-0000-0000-000000000000'},
+  {id:'pm',name:'Philippe M.',email:'pmassard@74software.com',role:'admin',status:'actif',pwd:'Audit1234!',organization_id:'00000000-0000-0000-0000-000000000001'},
+  {id:'sh',name:'Selma H.',email:'shentabli@74software.com',role:'auditeur',status:'actif',pwd:'Audit1234!',organization_id:'00000000-0000-0000-0000-000000000001'},
+  {id:'ne',name:'Nisrine E.',email:'nechah@74software.com',role:'auditeur',status:'actif',pwd:'Audit1234!',organization_id:'00000000-0000-0000-0000-000000000001'},
+  // Superadmin — à adapter avec votre email et mot de passe
+  {id:'superadmin',name:'Super Admin',email:'pmassard.fr@gmail.com',role:'superadmin',status:'actif',pwd:'Audit1234!',organization_id:'00000000-0000-0000-0000-000000000000'},
 ];
 let PENDING=[];
 let HISTORY_LOG=[];
@@ -170,6 +143,11 @@ let PROCESSES=[
   {id:'p12',dom:'Support',proc:'Treasury & Tax',risk:1,riskLevel:'faible',archived:false,y26:{l:'Cash',e:'grp'},y28:{l:'Research Tax Credit',e:'grp'}},
   {id:'p13',dom:'Support',proc:'Cybersecurity & Data',risk:3,riskLevel:'critique',archived:false,y27:{l:'Cybersecurity',e:'grp'}},
   {id:'p15',dom:'Support',proc:'Budget / Forecast',risk:1,riskLevel:'faible',archived:false},
+  // ─── Process ajoutés pour mapping bibliothèque de contrôles ─────────
+  {id:'p16',dom:'Support',proc:'Finance - Accounting and Tax',risk:2,riskLevel:'modere',archived:false},
+  {id:'p17',dom:'Support',proc:'Purchasing and Third Party Management',risk:2,riskLevel:'modere',archived:false},
+  {id:'p18',dom:'Support',proc:'HR - Talent Acquisition',risk:1,riskLevel:'faible',archived:false},
+  {id:'p19',dom:'Support',proc:'HR - Payroll',risk:2,riskLevel:'modere',archived:false},
 ];
 
 let ACTIONS=[
