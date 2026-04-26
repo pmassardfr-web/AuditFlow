@@ -253,7 +253,7 @@ var LIST_SCHEMAS = {
   AF_Users: [
     {name:'af_id',text:{}},{name:'email',text:{}},{name:'name',text:{}},
     {name:'role',text:{}},{name:'initials',text:{}},{name:'status',text:{}},
-    {name:'pwd',text:{}},{name:'source',text:{}},
+    {name:'source',text:{}},
   ],
   AF_Structure: [
     {name:'af_id',text:{}},{name:'region',text:{}},{name:'country',text:{}},
@@ -357,7 +357,7 @@ async function loadAllData() {
 
     DB.users = usersRaw.map(function(r){ var f=r.fields; return {
       id:f.af_id, name:f.name||f.Title, email:f.email, role:f.role||'auditeur',
-      initials:f.initials||'', status:f.status||'actif', pwd:f.pwd||'', source:f.source||'local',
+      initials:f.initials||'', status:f.status||'actif', source:f.source||'local',
     };});
 
     DB.auditPlan = planRaw.map(function(r){
@@ -556,7 +556,7 @@ async function addHistoryDB(type, msg, userName) {
 async function saveUser(user) {
   await spUpsert('AF_Users', user.id, {
     email:user.email, name:user.name, role:user.role, initials:user.initials||'',
-    status:user.status||'actif', pwd:user.pwd||'', source:user.source||'local', Title:user.name,
+    status:user.status||'actif', source:user.source||'local', Title:user.name,
   });
 }
 
@@ -632,7 +632,7 @@ async function loadAuthorizedUsers() {
     var items = await listItems('AF_Users');
     return items.map(function(r){ var f=r.fields; return {
       id:f.af_id||f.email, name:f.name||f.Title, email:f.email, role:f.role||'viewer',
-      initials:f.initials||'', status:f.status||'actif', pwd:f.pwd||'', source:f.source||'sso',
+      initials:f.initials||'', status:f.status||'actif', source:f.source||'sso',
     };});
   } catch(e) { console.warn('[SP] loadAuthorizedUsers error:', e.message); return USERS; }
 }
@@ -640,7 +640,7 @@ async function loadAuthorizedUsers() {
 async function inviteUser(email, name, role) {
   var id = 'usr_'+Date.now();
   var initials = name.split(' ').map(function(w){return w[0];}).join('').toUpperCase().slice(0,2);
-  var user = {id,name,email,role,initials,status:'actif',source:'invited',pwd:''};
+  var user = {id,name,email,role,initials,status:'actif',source:'invited'};
   await saveUser(user);
   USERS.push(user);
   return user;
