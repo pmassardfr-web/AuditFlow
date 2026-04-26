@@ -3026,6 +3026,346 @@ async function plSavePL(pl) {
   } catch(e){ console.warn('[PL] save error:', e.message); toast('Erreur sauvegarde: '+e.message); }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// §  14b. VUE — BIBLIOTHÈQUE DE CONTRÔLES (COSO/COBIT/ITGC)
+//        V['controls-library'], libRender, libControlModal, libImportToAudit
+// ═══════════════════════════════════════════════════════════════════════════
+
+V['controls-library']=()=>`
+  <div class="topbar">
+    <div class="tbtitle">📚 Bibliothèque de contrôles</div>
+    <button class="bp" onclick="libAddControl()">+ Nouveau contrôle</button>
+  </div>
+  <div class="content">
+    <div style="display:flex;gap:10px;margin-bottom:1rem;flex-wrap:wrap">
+      <input type="text" id="lib-search" placeholder="🔍 Rechercher (nom, code, description...)" style="flex:1;min-width:200px;font-size:12px" oninput="libRender()"/>
+      <select id="lib-fw" style="font-size:12px;min-width:140px" onchange="libRender()">
+        <option value="">Tous frameworks</option>
+        ${(typeof CONTROL_FRAMEWORKS!=='undefined'?CONTROL_FRAMEWORKS:[]).map(f=>'<option>'+f+'</option>').join('')}
+      </select>
+      <select id="lib-dom" style="font-size:12px;min-width:160px" onchange="libRender()">
+        <option value="">Tous domaines</option>
+        ${(typeof CONTROL_DOMAINS!=='undefined'?CONTROL_DOMAINS:[]).map(d=>'<option>'+d+'</option>').join('')}
+      </select>
+      <select id="lib-key" style="font-size:12px;min-width:110px" onchange="libRender()">
+        <option value="">Key & Non-Key</option>
+        <option value="1">Key uniquement</option>
+        <option value="0">Non-Key uniquement</option>
+      </select>
+    </div>
+    <div id="lib-stats" style="font-size:11px;color:var(--text-3);margin-bottom:8px"></div>
+    <div id="lib-list"></div>
+  </div>`;
+I['controls-library']=()=>libRender();
+
+function libRender(){
+  var search = (document.getElementById('lib-search')||{}).value || '';
+  var fw = (document.getElementById('lib-fw')||{}).value || '';
+  var dom = (document.getElementById('lib-dom')||{}).value || '';
+  var keyFilter = (document.getElementById('lib-key')||{}).value || '';
+  var s = search.toLowerCase().trim();
+
+  var rows = (CONTROLS_LIBRARY||[]).filter(function(c){
+    if (fw && c.framework !== fw) return false;
+    if (dom && c.domain !== dom) return false;
+    if (keyFilter === '1' && !c.key) return false;
+    if (keyFilter === '0' && c.key) return false;
+    if (s) {
+      var hay = (c.code+' '+c.name+' '+c.description+' '+c.wcgwTypical+' '+c.framework+' '+c.domain).toLowerCase();
+      if (hay.indexOf(s) < 0) return false;
+    }
+    return true;
+  });
+
+  var statsEl = document.getElementById('lib-stats');
+  if (statsEl) {
+    statsEl.textContent = rows.length + ' / ' + (CONTROLS_LIBRARY||[]).length + ' contrôles affichés';
+  }
+
+  var listEl = document.getElementById('lib-list');
+  if (!listEl) return;
+
+  if (!rows.length) {
+    listEl.innerHTML = '<div class="card" style="text-align:center;padding:2rem;color:var(--text-3);font-style:italic">'
+      + (CONTROLS_LIBRARY.length ? 'Aucun contrôle ne correspond aux critères.' : 'La bibliothèque est vide. Cliquez sur "+ Nouveau contrôle" pour en ajouter.')
+      + '</div>';
+    return;
+  }
+
+  // Grouper par framework
+  var byFw = {};
+  rows.forEach(function(c){
+    var k = c.framework || '— Sans framework —';
+    if (!byFw[k]) byFw[k] = [];
+    byFw[k].push(c);
+  });
+
+  var html = '';
+  Object.keys(byFw).sort().forEach(function(fw){
+    html += '<div style="margin-bottom:1.5rem">';
+    html += '<div style="font-size:13px;font-weight:600;color:var(--purple-dk);margin-bottom:.5rem;padding:6px 10px;background:var(--purple-lt);border-radius:5px">'+fw+' <span style="font-weight:400;color:var(--text-3);font-size:11px">('+byFw[fw].length+')</span></div>';
+    byFw[fw].forEach(function(c){
+      html += '<div class="card" style="padding:12px;margin-bottom:6px;display:flex;gap:10px;align-items:flex-start">';
+      html += '<div style="flex:1;min-width:0">';
+      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">';
+      if (c.code) html += '<span style="font-size:10px;color:var(--text-3);font-family:monospace">'+c.code+'</span>';
+      html += '<span style="font-weight:600;font-size:13px">'+c.name+'</span>';
+      html += '<span class="badge '+(c.key?'bpc':'bpl')+'" style="font-size:9px">'+(c.key?'Key':'Non-Key')+'</span>';
+      html += '<span class="badge bdn" style="font-size:9px">'+(c.designDefault||'Existing')+'</span>';
+      if (c.domain) html += '<span class="badge" style="background:#E5E7EB;color:#374151;font-size:9px">'+c.domain+'</span>';
+      html += '</div>';
+      if (c.description) html += '<div style="font-size:11px;color:var(--text-2);margin:4px 0">'+c.description+'</div>';
+      if (c.wcgwTypical) html += '<div style="font-size:10px;color:var(--text-3);margin:4px 0"><strong>WCGW typique :</strong> '+c.wcgwTypical+'</div>';
+      html += '<div style="display:flex;gap:12px;font-size:10px;color:var(--text-3);margin-top:4px;flex-wrap:wrap">';
+      if (c.nature) html += '<span><strong>Nature :</strong> '+c.nature+'</span>';
+      if (c.frequency) html += '<span><strong>Fréquence :</strong> '+c.frequency+'</span>';
+      if (c.ownerType) html += '<span><strong>Owner type :</strong> '+c.ownerType+'</span>';
+      html += '</div>';
+      html += '</div>';
+      html += '<div style="display:flex;flex-direction:column;gap:4px">';
+      html += '<button class="bs" style="font-size:10px;padding:3px 8px" onclick="libEditControl(\''+c.id+'\')">Éditer</button>';
+      html += '<button class="bd" style="font-size:10px;padding:3px 8px" onclick="libDeleteControl(\''+c.id+'\')">Archiver</button>';
+      html += '</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+  });
+  listEl.innerHTML = html;
+}
+
+function libControlModal(existing) {
+  var c = existing || {};
+  var fwOpts = (CONTROL_FRAMEWORKS||[]).map(function(f){return '<option value="'+f+'"'+(c.framework===f?' selected':'')+'>'+f+'</option>';}).join('');
+  var domOpts = (CONTROL_DOMAINS||[]).map(function(d){return '<option value="'+d+'"'+(c.domain===d?' selected':'')+'>'+d+'</option>';}).join('');
+  var natOpts = ['IT','IT-Dependent','Manual'].map(function(n){return '<option value="'+n+'"'+(c.nature===n?' selected':'')+'>'+n+'</option>';}).join('');
+  var freqOpts = ['As needed','Day','Week','Month','Quarter','Semester','Year'].map(function(f){return '<option value="'+f+'"'+(c.frequency===f?' selected':'')+'>'+f+'</option>';}).join('');
+
+  var body = '<div class="g2">'
+    + '<div><label>Framework <span style="color:var(--red)">*</span></label><select id="lc-fw"><option value="">— Choisir —</option>'+fwOpts+'</select></div>'
+    + '<div><label>Domaine</label><select id="lc-dom"><option value="">—</option>'+domOpts+'</select></div>'
+    + '</div>'
+    + '<div class="g2">'
+    + '<div><label>Code</label><input id="lc-code" value="'+(c.code||'')+'" placeholder="ex: COSO-CC-12.3"/></div>'
+    + '<div><label>Type</label><select id="lc-key"><option value="1"'+(c.key?' selected':'')+'>Key</option><option value="0"'+(!c.key?' selected':'')+'>Non Key</option></select></div>'
+    + '</div>'
+    + '<div><label>Nom <span style="color:var(--red)">*</span></label><input id="lc-name" value="'+(c.name||'')+'" placeholder="ex: Validation à 2 niveaux des accès"/></div>'
+    + '<div><label>Description</label><textarea id="lc-desc" style="width:100%;min-height:60px" placeholder="Décrivez le contrôle...">'+(c.description||'')+'</textarea></div>'
+    + '<div><label>WCGW typique (que ce contrôle bloque)</label><textarea id="lc-wcgw" style="width:100%;min-height:50px" placeholder="ex: Modification non autorisée des écritures comptables">'+(c.wcgwTypical||'')+'</textarea></div>'
+    + '<div class="g2">'
+    + '<div><label>Nature</label><select id="lc-nat"><option value="">—</option>'+natOpts+'</select></div>'
+    + '<div><label>Fréquence</label><select id="lc-freq"><option value="">—</option>'+freqOpts+'</select></div>'
+    + '</div>'
+    + '<div class="g2">'
+    + '<div><label>Design par défaut</label><select id="lc-design"><option value="Existing"'+(c.designDefault==='Existing'?' selected':'')+'>Existing</option><option value="Target"'+(c.designDefault==='Target'?' selected':'')+'>Target</option></select></div>'
+    + '<div><label>Owner type</label><input id="lc-owner" value="'+(c.ownerType||'')+'" placeholder="ex: Finance, IT, RH..."/></div>'
+    + '</div>'
+    + '<div><label>Procédures de test</label><textarea id="lc-test" style="width:100%;min-height:70px" placeholder="ex: Échantillonner 25 transactions du trimestre. Vérifier que chaque a 2 signataires distincts dans l\'ERP. Documenter les exceptions.">'+(c.testProcedures||'')+'</textarea></div>';
+
+  openModal(existing ? 'Éditer le contrôle' : 'Nouveau contrôle de bibliothèque', body, async function(){
+    var fw = document.getElementById('lc-fw').value;
+    var name = document.getElementById('lc-name').value.trim();
+    if (!fw) { toast('Framework obligatoire'); return; }
+    if (!name) { toast('Nom obligatoire'); return; }
+
+    var ctrl = {
+      id: existing ? existing.id : 'lib_'+Date.now(),
+      framework: fw,
+      domain: document.getElementById('lc-dom').value,
+      code: document.getElementById('lc-code').value.trim(),
+      name: name,
+      description: document.getElementById('lc-desc').value.trim(),
+      wcgwTypical: document.getElementById('lc-wcgw').value.trim(),
+      nature: document.getElementById('lc-nat').value,
+      frequency: document.getElementById('lc-freq').value,
+      key: document.getElementById('lc-key').value === '1',
+      designDefault: document.getElementById('lc-design').value,
+      ownerType: document.getElementById('lc-owner').value.trim(),
+      testProcedures: document.getElementById('lc-test').value.trim(),
+      appliesToDomains: existing ? (existing.appliesToDomains||[]) : [],
+      archived: false,
+    };
+
+    if (existing) {
+      var idx = CONTROLS_LIBRARY.findIndex(function(x){return x.id===existing.id;});
+      if (idx>=0) CONTROLS_LIBRARY[idx] = ctrl;
+      addHist('edit', 'Contrôle bibliothèque "'+name+'" modifié');
+    } else {
+      CONTROLS_LIBRARY.push(ctrl);
+      addHist('add', 'Contrôle bibliothèque "'+name+'" ajouté');
+    }
+    await libSaveControl(ctrl);
+    libRender();
+    toast('Contrôle '+(existing?'modifié':'ajouté')+' ✓');
+  });
+}
+
+function libAddControl(){ libControlModal(null); }
+function libEditControl(id){
+  var c = CONTROLS_LIBRARY.find(function(x){return x.id===id;});
+  if (c) libControlModal(c);
+}
+async function libDeleteControl(id){
+  var c = CONTROLS_LIBRARY.find(function(x){return x.id===id;});
+  if (!c) return;
+  if (!confirm('Archiver le contrôle "'+c.name+'" ?\n\nIl ne sera plus proposé à l\'import dans les audits, mais reste en base.')) return;
+  c.archived = true;
+  await libSaveControl(c);
+  CONTROLS_LIBRARY = CONTROLS_LIBRARY.filter(function(x){return x.id!==id;});
+  addHist('arch', 'Contrôle bibliothèque "'+c.name+'" archivé');
+  libRender();
+  toast('Contrôle archivé ✓');
+}
+
+async function libSaveControl(c) {
+  try {
+    await spUpsert('AF_ControlsLibrary', c.id, {
+      framework: c.framework||'',
+      domain: c.domain||'',
+      code: c.code||'',
+      lib_name: c.name||'',
+      description: c.description||'',
+      wcgw_typical: c.wcgwTypical||'',
+      nature: c.nature||'',
+      frequency: c.frequency||'',
+      key: !!c.key,
+      design_default: c.designDefault||'Existing',
+      owner_type: c.ownerType||'',
+      test_procedures: c.testProcedures||'',
+      applies_to_domains: JSON.stringify(c.appliesToDomains||[]),
+      archived: !!c.archived,
+      Title: c.name||c.code||'(sans nom)',
+    });
+  } catch(e){ console.warn('[Lib] save error:', e.message); toast('Erreur sauvegarde: '+e.message); }
+}
+
+// ─── Import depuis bibliothèque dans la modal Contrôle (étape 5) ──────────
+function libShowImportModal() {
+  if (!CONTROLS_LIBRARY || !CONTROLS_LIBRARY.length) {
+    toast('La bibliothèque est vide. Va dans 📚 Bibliothèque de contrôles pour en ajouter.');
+    return;
+  }
+  // Récupérer le domaine du processus de l'audit en cours pour pré-filtrer
+  var a = (AUDIT_PLAN||[]).find(function(x){return x.id===CA;});
+  var pids = (Array.isArray(a&&a.processIds) && a.processIds.length) ? a.processIds : (a&&a.processId ? [a.processId] : []);
+  var auditDomains = [];
+  pids.forEach(function(pid){
+    var p = PROCESSES.find(function(x){return x.id===pid;});
+    if (p && p.dom) auditDomains.push(p.dom);
+  });
+
+  var fwOpts = '<option value="">Tous</option>'+(CONTROL_FRAMEWORKS||[]).map(function(f){return '<option>'+f+'</option>';}).join('');
+  var domOpts = '<option value="">Tous</option>'+(CONTROL_DOMAINS||[]).map(function(d){return '<option>'+d+'</option>';}).join('');
+
+  var body = '<div style="font-size:11px;color:var(--text-3);margin-bottom:10px">Sélectionnez les contrôles à importer dans cet audit. Les valeurs seront copiées et restent modifiables.</div>'
+    + '<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">'
+    + '<input type="text" id="li-search" placeholder="🔍 Rechercher..." style="flex:1;min-width:140px;font-size:11px" oninput="libRefreshImportList()"/>'
+    + '<select id="li-fw" style="font-size:11px" onchange="libRefreshImportList()">'+fwOpts+'</select>'
+    + '<select id="li-dom" style="font-size:11px" onchange="libRefreshImportList()">'+domOpts+'</select>'
+    + '</div>'
+    + '<div id="li-list" style="max-height:400px;overflow-y:auto;border:.5px solid var(--border);border-radius:6px;padding:6px"></div>'
+    + '<div id="li-count" style="font-size:11px;color:var(--text-3);margin-top:6px;text-align:right"></div>';
+
+  openModal('📚 Importer depuis la bibliothèque', body, async function(){
+    var checked = document.querySelectorAll('.li-cb:checked');
+    if (!checked.length) { toast('Aucun contrôle sélectionné'); return; }
+    var d = getAudData(CA);
+    if (!d.controls) d.controls = {};
+    if (!d.controls[CS]) d.controls[CS] = [];
+
+    var importedCount = 0;
+    checked.forEach(function(cb){
+      var libCtrl = CONTROLS_LIBRARY.find(function(x){return x.id===cb.value;});
+      if (!libCtrl) return;
+      var idx = d.controls[CS].length;
+      d.controls[CS].push({
+        id: 'ctrl_'+Date.now()+'_'+idx,
+        code: libCtrl.code || ('CTRL-'+(idx+1)),
+        name: libCtrl.name,
+        label: libCtrl.name,
+        description: libCtrl.description,
+        clef: libCtrl.key,
+        design: (libCtrl.designDefault||'Existing').toLowerCase(),
+        nature: libCtrl.nature,
+        freq: libCtrl.frequency,
+        owner: libCtrl.ownerType,
+        wcgwId: '', // à lier manuellement à un WCGW
+        result: null, testNature: '', finding: '', finalized: false,
+        // Traçabilité : on garde la référence au contrôle source
+        _libRef: { id: libCtrl.id, framework: libCtrl.framework, code: libCtrl.code },
+        _libTestProcedures: libCtrl.testProcedures, // utile pour étape 6
+      });
+      importedCount++;
+    });
+
+    addHist('add', importedCount+' contrôle(s) importé(s) depuis la bibliothèque');
+    await saveAuditData(CA);
+    document.getElementById('det-content').innerHTML = renderDetContent();
+    toast(importedCount+' contrôle(s) importé(s) ✓');
+  });
+
+  // Pré-filtrer si possible : le domaine du process audité
+  setTimeout(function(){
+    // Sélectionner le 1er domaine d'audit dans le dropdown si possible
+    var dom = auditDomains[0];
+    if (dom) {
+      var sel = document.getElementById('li-dom');
+      if (sel) {
+        // Chercher une correspondance approximative
+        for (var i=0; i<sel.options.length; i++) {
+          if (sel.options[i].value && dom.toLowerCase().indexOf(sel.options[i].value.toLowerCase().split(' ')[0])>=0) {
+            sel.selectedIndex = i;
+            break;
+          }
+        }
+      }
+    }
+    libRefreshImportList();
+  }, 50);
+}
+
+function libRefreshImportList() {
+  var search = (document.getElementById('li-search')||{}).value || '';
+  var fw = (document.getElementById('li-fw')||{}).value || '';
+  var dom = (document.getElementById('li-dom')||{}).value || '';
+  var s = search.toLowerCase().trim();
+
+  var rows = (CONTROLS_LIBRARY||[]).filter(function(c){
+    if (fw && c.framework !== fw) return false;
+    if (dom && c.domain !== dom) return false;
+    if (s) {
+      var hay = (c.code+' '+c.name+' '+c.description+' '+c.wcgwTypical).toLowerCase();
+      if (hay.indexOf(s) < 0) return false;
+    }
+    return true;
+  });
+
+  var listEl = document.getElementById('li-list');
+  var countEl = document.getElementById('li-count');
+  if (countEl) countEl.textContent = rows.length + ' contrôle(s) disponible(s)';
+  if (!listEl) return;
+
+  if (!rows.length) {
+    listEl.innerHTML = '<div style="text-align:center;padding:1rem;color:var(--text-3);font-style:italic;font-size:11px">Aucun contrôle ne correspond.</div>';
+    return;
+  }
+
+  var html = rows.map(function(c){
+    return '<label style="display:flex !important;flex-direction:row !important;align-items:flex-start !important;gap:8px;padding:8px;border-bottom:.5px solid var(--border);cursor:pointer;width:auto !important">'
+      + '<input type="checkbox" class="li-cb" value="'+c.id+'" style="margin-top:3px;flex-shrink:0;width:14px !important">'
+      + '<div style="flex:1;min-width:0">'
+      + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:2px">'
+      + (c.code?'<span style="font-size:10px;color:var(--text-3);font-family:monospace">'+c.code+'</span>':'')
+      + '<span style="font-weight:500;font-size:12px">'+c.name+'</span>'
+      + '<span class="badge bpl" style="font-size:9px">'+c.framework+'</span>'
+      + '<span class="badge '+(c.key?'bpc':'bpl')+'" style="font-size:9px">'+(c.key?'Key':'Non-Key')+'</span>'
+      + '</div>'
+      + (c.description?'<div style="font-size:10px;color:var(--text-2);margin-top:2px">'+c.description+'</div>':'')
+      + '</div>'
+      + '</label>';
+  }).join('');
+  listEl.innerHTML = html;
+}
+
 // ══════════════════════════════════════════════════════════════
 //  HISTORIQUE (inchangé)
 // ══════════════════════════════════════════════════════════════
@@ -3730,7 +4070,10 @@ function renderControlsSection() {
   var html = '<div class="card" style="margin-bottom:.75rem">';
   html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">';
   html += '<div style="font-size:12px;font-weight:600;color:var(--text-2)">Contrôles <span style="font-size:10px;font-weight:400;color:var(--text-3)">('+ctrls.length+')</span></div>';
+  html += '<div style="display:flex;gap:5px">';
+  html += '<button class="bs" style="font-size:11px;padding:3px 9px" onclick="libShowImportModal()" title="Importer des contrôles depuis la bibliothèque (COSO/COBIT/ITGC...)">📚 Depuis bibliothèque</button>';
   html += '<button class="bs" style="font-size:11px;padding:3px 9px" onclick="showAddControlModal()">+ Ajouter un contrôle</button>';
+  html += '</div>';
   html += '</div>';
   html += '<div style="font-size:10px;color:var(--text-3);margin-bottom:8px;font-style:italic">Chaque contrôle bloque un WCGW spécifique.</div>';
 
