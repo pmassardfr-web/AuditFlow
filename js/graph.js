@@ -269,6 +269,13 @@ var LIST_SCHEMAS = {
     {name:'af_id',text:{}},{name:'pl_name',text:{}},{name:'society',text:{}},
     {name:'countries_json',text:{}},{name:'description',text:{}},
   ],
+  AF_ControlsLibrary: [
+    {name:'af_id',text:{}},{name:'framework',text:{}},{name:'domain',text:{}},
+    {name:'code',text:{}},{name:'lib_name',text:{}},{name:'description',text:{}},
+    {name:'wcgw_typical',text:{}},{name:'nature',text:{}},{name:'frequency',text:{}},
+    {name:'key',text:{}},{name:'design_default',text:{}},{name:'owner_type',text:{}},
+    {name:'test_procedures',text:{}},{name:'applies_to_domains',text:{}},{name:'archived',text:{}},
+  ],
   AF_Config: [
     {name:'af_id',text:{}},{name:'value_json',text:{}},
   ],
@@ -457,6 +464,32 @@ async function loadAllData() {
       });
       console.log('[SP] ProductLines loaded:', PRODUCT_LINES.length, 'PLs');
     } catch(e){ console.warn('[SP] AF_ProductLines not found or empty:', e.message); PRODUCT_LINES = []; }
+
+    // Charger la bibliothèque de contrôles (référentiel COSO/COBIT/ITGC...)
+    try {
+      var libRaw = await listItems('AF_ControlsLibrary');
+      CONTROLS_LIBRARY = libRaw.map(function(r){
+        var f = r.fields;
+        return {
+          id: f.af_id,
+          framework: f.framework || '',
+          domain: f.domain || '',
+          code: f.code || '',
+          name: f.lib_name || f.Title || '',
+          description: f.description || '',
+          wcgwTypical: f.wcgw_typical || '',
+          nature: f.nature || '',
+          frequency: f.frequency || '',
+          key: f.key === true || f.key === 'true' || f.key === 1,
+          designDefault: f.design_default || 'Existing',
+          ownerType: f.owner_type || '',
+          testProcedures: f.test_procedures || '',
+          appliesToDomains: tryParse(f.applies_to_domains, []),
+          archived: f.archived === true || f.archived === 'true' || f.archived === 1,
+        };
+      }).filter(function(c){return !c.archived;});
+      console.log('[SP] ControlsLibrary loaded:', CONTROLS_LIBRARY.length, 'controls');
+    } catch(e){ console.warn('[SP] AF_ControlsLibrary not found or empty:', e.message); CONTROLS_LIBRARY = []; }
 
     // Synchroniser TM et AVC avec les utilisateurs SharePoint
     syncTeamMembers();
