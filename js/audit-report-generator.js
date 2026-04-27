@@ -152,7 +152,6 @@ async function generateAuditReportPptx(auditId) {
   const findings = Array.isArray(d.findings) ? d.findings : [];
   const controls = (d.controls && d.controls[4]) || [];
   const mgtResp = Array.isArray(d.mgtResp) ? d.mgtResp : [];
-  const maturity = d.maturity || null;
 
   // Récupérer le nom du process
   const procIds = Array.isArray(ap.processIds) && ap.processIds.length ? ap.processIds : (ap.processId ? [ap.processId] : []);
@@ -179,14 +178,23 @@ async function generateAuditReportPptx(auditId) {
   const failedTests = testedControls.filter(c => c.result === 'fail');
   const passedTests = testedControls.filter(c => c.result === 'pass');
 
-  // Maturité label
+  // Maturité : peut être une chaîne (ancien format) ou un objet {level, notes, saved} (nouveau format)
+  let maturityLevel = null;
+  if (d.maturity) {
+    if (typeof d.maturity === 'string') {
+      maturityLevel = d.maturity;
+    } else if (typeof d.maturity === 'object' && d.maturity.level) {
+      maturityLevel = d.maturity.level;
+    }
+  }
   const maturityLabels = {
     unsatisfactory: {label: 'Unsatisfactory', color: AR_COLORS.red},
     major: {label: 'Major improvements', color: 'E97132'},
     some:  {label: 'Some improvements',  color: AR_COLORS.yellow},
     effective: {label: 'Effective', color: '548235'},
   };
-  const matInfo = maturity && maturityLabels[maturity] ? maturityLabels[maturity] : null;
+  const matInfo = maturityLevel && maturityLabels[maturityLevel] ? maturityLabels[maturityLevel] : null;
+  console.log('[AUDIT_REPORT] Maturity =', d.maturity, '→ level =', maturityLevel, '→ matInfo =', matInfo);
 
   // Titre court
   const auditTitleShort = ap.titre || processName;
