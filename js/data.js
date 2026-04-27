@@ -14,16 +14,16 @@ const KEY_STEPS = [2, 4, 5, 6, 8]; // Kick Off, Test Strategy, Testings, Report,
 //  CS = step index (0-based)
 // ══════════════════════════════════════════════════════════════
 const EXPECTED_DOCS_BY_STEP = {
-  0: ['Audit Plan', 'Audit Charter'],
-  1: ['Work Program', 'Audit Notice'],
-  2: ['Mémo de Kick-Off', 'Présentation de cadrage', 'Liste des participants'],
-  3: ['Comptes-rendus d\'interview', 'Flowcharts du process', 'Liste des participants'],
-  4: ['Risk & Control Matrix (RCM)', 'Test Strategy', 'Sample selection'],
-  5: ['Test results', 'Working papers'],
-  6: ['Rapport d\'audit (draft)', 'Rapport d\'audit (final)'],
-  7: ['Compte-rendu de restitution', 'Présentation de restitution'],
-  8: ['Tableau des Management Responses'],
-  9: ['Closing memo', 'Présentation Comité d\'audit'],
+  0: ['Audit Plan Memo'],
+  1: ['Work Program'],
+  2: ['Kick-Off Presentation', 'Meeting Invite'],
+  3: ['Narratifs', 'Flowcharts'],
+  4: ['Test Strategy'],
+  5: ['Working papers'],
+  6: ['Rapport d\'audit'],
+  7: ['Meeting Invite'],
+  8: [],
+  9: [],
 };
 
 // ══════════════════════════════════════════════════════════════
