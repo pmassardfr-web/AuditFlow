@@ -3129,18 +3129,7 @@ V['audit-detail']=()=>{
       </div>
     </div>
     <div class="content">
-      <div class="card" style="margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between">
-        <div>
-          <div style="font-size:14px;font-weight:600">${a.name}</div>
-          <div style="font-size:11px;color:var(--text-2);margin-top:2px">${a.ent} · ${a.type} Audit</div>
-        </div>
-      </div>
-      <div class="card" style="display:flex;align-items:center;gap:12px;margin-bottom:1rem">
-        <span style="font-size:11px;color:var(--text-2);white-space:nowrap" id="gp-lbl">Étape ${CS+1}/11 — ${step.s}</span>
-        <div class="pbar" style="flex:1"><div class="pfill" id="gp-fill" style="width:${pct}%"></div></div>
-        <span style="font-size:11px;color:var(--text-2)" id="gp-pct">${pct}%</span>
-      </div>
-      <div class="card" style="margin-bottom:1rem" id="stepper-card">${renderStepper()}</div>
+      <div id="audit-header-compact">${renderAuditHeaderCompact(a, step, pct)}</div>
       <div id="det-content">${renderDetContent()}</div>
     </div>`;
 };
@@ -3149,11 +3138,98 @@ I['audit-detail']=()=>{};
 function getStepTabs(){return ['main'];} // gardé pour compat (plus utilisé avec onglets)
 const TLBL={'main':'Détail'};
 function renderDetTabs(){return '';}
+
+// ─── Nouveau header compact (option B - phases colorées) ───────────────
+function renderAuditHeaderCompact(a, step, pct) {
+  var d = getAudData(CA);
+  var keyStep = isKeyStep(CS);
+  var state = getStepState(CA, CS);
+  var isAdmin = CU && CU.role === 'admin';
+  var prepDone = (state.status === 'finalized' || state.status === 'reviewed');
+  var revDone = (state.status === 'reviewed');
+
+  // Statut de l'étape sous forme de capsule
+  var statusPill;
+  if (revDone) {
+    statusPill = '<span style="background:#E1F5EE;color:#085041;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:500">✓ Revue & validée</span>';
+  } else if (prepDone) {
+    statusPill = '<span style="background:#E6F1FB;color:#0C447C;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:500">⏳ En attente revue</span>';
+  } else {
+    statusPill = '<span style="background:#F1EFE8;color:#5F5E5A;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:500">À faire</span>';
+  }
+
+  // Bouton d'action selon le rôle et l'état
+  var actionBtn = '';
+  if (!prepDone) {
+    actionBtn = '<button class="bs" style="font-size:11px;padding:5px 12px" onclick="toggleStepPrepDone(true)">Marquer prête pour revue</button>';
+  } else if (prepDone && !revDone && isAdmin) {
+    actionBtn = '<button class="bp" style="font-size:11px;padding:5px 12px" onclick="toggleStepReviewed(true)">Valider la revue</button>';
+  } else if (prepDone && !revDone && !isAdmin) {
+    actionBtn = '<span style="font-size:11px;color:var(--text-3);padding:5px 0;font-style:italic">En attente d\'un admin</span>';
+  } else {
+    actionBtn = '<button class="bs" style="font-size:11px;padding:5px 12px" onclick="toggleStepReviewed(false)">Rouvrir l\'étape</button>';
+  }
+
+  // Construction du stepper en 3 phases colorées
+  var phases = [
+    {idxs: [0,1,2],   name: 'Préparation', bg: '#EEEDFE', txt: '#3C3489'},
+    {idxs: [3,4,5],   name: 'Réalisation', bg: '#E1F5EE', txt: '#085041'},
+    {idxs: [6,7,8,9], name: 'Restitution', bg: '#FAEEDA', txt: '#854F0B'},
+  ];
+
+  var phaseHtml = phases.map(function(p){
+    var stepDots = p.idxs.map(function(i, idx){
+      var isDone = i < CS;
+      var isActive = i === CS;
+      var dotStyle = isDone
+        ? 'background:'+p.txt+';color:#fff;border:none'
+        : isActive
+        ? 'background:#fff;color:'+p.txt+';border:2px solid '+p.txt+';font-weight:500'
+        : 'background:#fff;color:'+p.txt+';border:1px solid '+p.txt+';opacity:0.4';
+      var dotContent = isDone ? '✓' : (i+1);
+      var separator = idx < p.idxs.length - 1
+        ? '<div style="flex:1;height:2px;background:'+(i<CS?p.txt:p.txt+'40')+';min-width:6px"></div>'
+        : '';
+      return '<div onclick="goStep('+i+')" style="width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;cursor:pointer;flex-shrink:0;'+dotStyle+'" title="'+STEPS[i].s+'">'+dotContent+'</div>'+separator;
+    }).join('');
+    return '<div style="background:'+p.bg+';padding:7px 10px;border-radius:6px;flex:'+p.idxs.length+'">'
+      + '<div style="font-size:9px;color:'+p.txt+';font-weight:500;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px">'+p.name+'</div>'
+      + '<div style="display:flex;align-items:center;gap:0">'+stepDots+'</div>'
+      + '</div>';
+  }).join('<div style="width:6px"></div>');
+
+  // En-tête final
+  var html = '<div class="card" style="margin-bottom:1rem;padding:14px 16px">';
+
+  // Ligne 1 : capsules de statut + bouton d'action
+  html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">';
+  html += '<span style="background:#EEEDFE;color:#3C3489;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:500">⏳ '+pct+'%</span>';
+  if (keyStep) {
+    html += '<span style="background:#FAEEDA;color:#854F0B;padding:4px 10px;border-radius:6px;font-size:11px">⚡ Étape clé</span>';
+  }
+  html += statusPill;
+  html += '<div style="margin-left:auto">'+actionBtn+'</div>';
+  html += '</div>';
+
+  // Ligne 2 : stepper en 3 phases colorées
+  html += '<div style="display:flex;align-items:stretch">'+phaseHtml+'</div>';
+
+  // Ligne 3 : nom de l'étape courante
+  html += '<div style="font-size:12px;color:var(--text-2);margin-top:8px;text-align:center">';
+  html += 'Étape '+(CS+1)+'/10 — <strong>'+step.s+'</strong>';
+  html += '</div>';
+
+  html += '</div>';
+  return html;
+}
+
 function renderStepper(){
-  const phases=[[0,1,2],[3,4,5],[6,7,8,9]];
-  const pn=['Préparation','Réalisation','Restitution'];
-  const d=getAudData(CA);
-  return phases.map((idxs,pi)=>`<div class="pl">${pn[pi]}</div><div class="step-row" style="margin-bottom:${pi<2?'1rem':'0'}">${idxs.map(i=>{const cls=i<CS?'done':i===CS?'active':'';const lbl=STEPS[i].s.replace('/',' /').split(' /');const st=(d.tasks[i]||[]);const assigned=[...new Set(st.map(t=>t.assignee).filter(x=>x&&x!=='none'))];return`<div class="step-item ${cls}" onclick="goStep(${i})"><div class="sc">${i<CS?'✓':i+1}</div><div class="sl">${lbl[0]}${lbl[1]?'<br>/'+lbl[1]:''}</div><div style="display:flex;gap:1px;margin-top:2px">${assigned.map(id=>avEl(id,12)).join('')}</div></div>`;}).join('')}</div>`).join('');
+  // Wrapper pour rétrocompatibilité (appelé ailleurs dans le code)
+  const a = getAudits().find(x => x.id === CA);
+  if (!a) return '';
+  const step = STEPS[CS] || {s:'—'};
+  const pct = Math.min(100, (CS + 1) * 10);
+  return renderAuditHeaderCompact(a, step, pct);
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -3170,18 +3246,8 @@ function renderDetContent(){
 
   var html = '';
 
-  // ── EN-TÊTE ──────────────────────────────────────────────
-  html += '<div class="card" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">'
-    + '<div><div style="font-size:14px;font-weight:600">Étape '+(CS+1)+' — '+s.s+'</div>'
-    + '<div style="font-size:11px;color:var(--text-3);margin-top:2px">Phase '+s.ph+'</div></div>'
-    + badge(a.statut||a.status||'Planifié')
-    + '</div>';
-
-  // ── 1. WORKFLOW (étape clé ou non) ───────────────────────
-  html += renderWorkflowSection();
-
-  // ── 2. STATUT (cases à cocher préparer / admin) ──────────
-  html += renderStatusSection();
+  // L'en-tête (étape + statut + workflow + cases revue) est désormais dans renderAuditHeaderCompact
+  // Plus besoin de répéter ici.
 
   // ── 3. SECTIONS SPÉCIFIQUES MÉTIER selon l'étape ─────────
   if (CS === 4) {
@@ -4175,7 +4241,7 @@ function downloadDoc(docId) {
 function goStep(i){
   CS=i;
   const pct=Math.min(100,(i+1)*10);
-  document.getElementById('stepper-card').innerHTML=renderStepper();
+  document.getElementById('audit-header-compact').innerHTML=renderStepper();
   var pf=document.getElementById('gp-fill'); if(pf)pf.style.width=pct+'%';
   var pp=document.getElementById('gp-pct'); if(pp)pp.textContent=pct+'%';
   var pl=document.getElementById('gp-lbl'); if(pl)pl.textContent=`Étape ${i+1}/11 — ${STEPS[i].s}`;
@@ -4321,9 +4387,9 @@ async function autoUnfinalizeIfNeeded() {
 
 async function validerEtape(){var ap=AUDIT_PLAN.find(function(a){return a.id===CA;});var d=getAudData(CA);var missing=getMissingDocs(CS,d.docs);if(missing.length){var msg='Document(s) requis :\n';missing.forEach(function(m){msg+='  • '+m+'\n';});alert(msg);return;}if(CS<9){CS++;if(ap){ap.statut='En cours';ap.step=CS;}await saveAuditPlan(ap);addHist('edit','Etape '+CS+' validée — '+(ap?ap.titre:''));goStep(CS);toast('"'+STEPS[CS].s+'" validée ✓');}else{if(ap){ap.statut='Clôturé';ap.step=9;await saveAuditPlan(ap);}toast('Mission clôturée ✓');}}
 function renderTaskList(st,a){if(!st.length)return'<div style="font-size:12px;color:var(--text-3);padding:.5rem">Aucune tâche.</div>';return st.map((t,i)=>`<div class="ti"><div class="tcb ${t.done?'done':''}" onclick="toggleTask(${i})">${t.done?'✓':''}</div><div class="tt ${t.done?'dt':''}">${t.desc}</div><select style="font-size:11px;padding:2px 6px;border-radius:20px;background:var(--bg)" onchange="reassignTask(${i},this.value)"><option value="none" ${!t.assignee||t.assignee==='none'?'selected':''}>—</option>${buildAssigneeOpts(a.assignedTo,t.assignee)}</select><span style="font-size:10px;color:${t.done?'var(--green)':t.assignee&&t.assignee!=='none'?'var(--purple)':'var(--text-3)'}">${t.done?'✓':t.assignee&&t.assignee!=='none'?'En cours':'À faire'}</span></div>`).join('');}
-async function toggleTask(i){const d=getAudData(CA);if(!d.tasks[CS])d.tasks[CS]=[];d.tasks[CS][i].done=!d.tasks[CS][i].done;await saveAuditData(CA);const a=getAudits().find(x=>x.id===CA);document.getElementById('task-list').innerHTML=renderTaskList(d.tasks[CS],a);document.getElementById('stepper-card').innerHTML=renderStepper();}
-async function reassignTask(i,val){const d=getAudData(CA);if(d.tasks[CS]&&d.tasks[CS][i])d.tasks[CS][i].assignee=val;await saveAuditData(CA);document.getElementById('stepper-card').innerHTML=renderStepper();if(val!=='none')toast(`Assigné à ${TM[val]?.name}`);}
-function showNewTaskModal(){const a=getAudits().find(x=>x.id===CA);openModal('Nouvelle tâche',`<div><label>Description</label><input id="t-desc" placeholder="ex : Analyser les données..."/></div><div><label>Assignée à</label><select id="t-assign"><option value="none">— Non assignée</option>${buildAssigneeOpts(a.assignedTo,null)}</select></div>`,async ()=>{const desc=document.getElementById('t-desc').value.trim();if(!desc){toast('Description obligatoire');return;}const d=getAudData(CA);if(!d.tasks[CS])d.tasks[CS]=[];d.tasks[CS].push({desc,assignee:document.getElementById('t-assign').value,done:false});await saveAuditData(CA);document.getElementById('det-content').innerHTML=renderDetContent();document.getElementById('stepper-card').innerHTML=renderStepper();toast('Tâche créée ✓');});}
+async function toggleTask(i){const d=getAudData(CA);if(!d.tasks[CS])d.tasks[CS]=[];d.tasks[CS][i].done=!d.tasks[CS][i].done;await saveAuditData(CA);const a=getAudits().find(x=>x.id===CA);document.getElementById('task-list').innerHTML=renderTaskList(d.tasks[CS],a);document.getElementById('audit-header-compact').innerHTML=renderStepper();}
+async function reassignTask(i,val){const d=getAudData(CA);if(d.tasks[CS]&&d.tasks[CS][i])d.tasks[CS][i].assignee=val;await saveAuditData(CA);document.getElementById('audit-header-compact').innerHTML=renderStepper();if(val!=='none')toast(`Assigné à ${TM[val]?.name}`);}
+function showNewTaskModal(){const a=getAudits().find(x=>x.id===CA);openModal('Nouvelle tâche',`<div><label>Description</label><input id="t-desc" placeholder="ex : Analyser les données..."/></div><div><label>Assignée à</label><select id="t-assign"><option value="none">— Non assignée</option>${buildAssigneeOpts(a.assignedTo,null)}</select></div>`,async ()=>{const desc=document.getElementById('t-desc').value.trim();if(!desc){toast('Description obligatoire');return;}const d=getAudData(CA);if(!d.tasks[CS])d.tasks[CS]=[];d.tasks[CS].push({desc,assignee:document.getElementById('t-assign').value,done:false});await saveAuditData(CA);document.getElementById('det-content').innerHTML=renderDetContent();document.getElementById('audit-header-compact').innerHTML=renderStepper();toast('Tâche créée ✓');});}
 function showAddControlModal_LEGACY_REMOVED(){/* doublon retiré */}
 async function removeControl(i){const d=getAudData(CA);d.controls[CS].splice(i,1);await saveAuditData(CA);document.getElementById('det-content').innerHTML=renderDetContent();}
 async function setTestNature(i,val){const d=getAudData(CA);const kc=(d.controls[4]||[]).filter(c=>c.clef&&c.design==='existing');if(kc[i]){kc[i].testNature=val;await saveAuditData(CA);}}
