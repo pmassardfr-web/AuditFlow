@@ -4120,6 +4120,20 @@ function renderFindingsSection() {
       html += '<div style="flex:1">';
       html += '<div style="font-size:13px;font-weight:600">'+(f.title||'(sans titre)')+'</div>';
       if (f.desc) html += '<div style="font-size:11px;color:var(--text-2);margin-top:4px;white-space:pre-wrap">'+f.desc+'</div>';
+      // Métadonnées : Owner + Risk level
+      var metaParts = [];
+      if (f.owner) metaParts.push('<strong>Owner:</strong> '+f.owner);
+      if (f.probability && f.impact) {
+        var probLabel = {rare:'Rare',unlikely:'Unlikely',possible:'Possible',probable:'Probable'}[f.probability]||f.probability;
+        var impLabel  = {minor:'Minor',limited:'Limited',major:'Major',severe:'Severe'}[f.impact]||f.impact;
+        metaParts.push('<strong>Risk:</strong> '+probLabel+' × '+impLabel);
+      }
+      if (metaParts.length) {
+        html += '<div style="font-size:10px;color:var(--text-3);margin-top:4px">'+metaParts.join(' · ')+'</div>';
+      }
+      if (f.potentialRisk) {
+        html += '<div style="font-size:10px;color:var(--text-3);margin-top:4px;padding:5px 8px;background:#FFF7ED;border-left:2px solid #F2A900;border-radius:3px"><strong>Potential Risk:</strong> '+f.potentialRisk+'</div>';
+      }
       html += '</div>';
       html += '<button class="bs" style="font-size:10px;padding:1px 6px" onclick="showEditFindingModal('+idx+')">Éditer</button>';
       html += '<button class="bd" style="font-size:10px;padding:1px 5px" onclick="removeManualFinding('+idx+')">×</button>';
@@ -4644,9 +4658,29 @@ function showFindingModal(existing) {
   var body = '<div><label>Titre du finding <span style="color:var(--red)">*</span></label>'
     + '<input id="f-title" value="'+(f.title||'').replace(/"/g,'&quot;')+'" placeholder="ex : Ségrégation des tâches insuffisante en P2P"/></div>'
     + '<div><label>Description / Constat</label>'
-    + '<textarea id="f-desc" style="width:100%;min-height:100px" placeholder="Constat, contexte, risque, recommandation...">'+(f.desc||'').replace(/</g,'&lt;')+'</textarea></div>'
+    + '<textarea id="f-desc" style="width:100%;min-height:80px" placeholder="Constat, contexte, recommandation...">'+(f.desc||'').replace(/</g,'&lt;')+'</textarea></div>'
+    + '<div><label>Potential Risk</label>'
+    + '<textarea id="f-risk" style="width:100%;min-height:50px" placeholder="ex : Missed renewals, lost revenue opportunities, contract leakage...">'+(f.potentialRisk||'').replace(/</g,'&lt;')+'</textarea></div>'
+    + '<div class="g2" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">'
+    + '<div><label>Owner</label>'
+    + '<input id="f-owner" value="'+(f.owner||'').replace(/"/g,'&quot;')+'" placeholder="ex : Sales Ops Director"/></div>'
+    + '<div><label>Probability</label>'
+    + '<select id="f-prob"><option value="">— Choose —</option>'
+    + '<option value="rare"'+(f.probability==='rare'?' selected':'')+'>Rare</option>'
+    + '<option value="unlikely"'+(f.probability==='unlikely'?' selected':'')+'>Unlikely</option>'
+    + '<option value="possible"'+(f.probability==='possible'?' selected':'')+'>Possible</option>'
+    + '<option value="probable"'+(f.probability==='probable'?' selected':'')+'>Probable</option>'
+    + '</select></div>'
+    + '<div><label>Impact</label>'
+    + '<select id="f-impact"><option value="">— Choose —</option>'
+    + '<option value="minor"'+(f.impact==='minor'?' selected':'')+'>Minor</option>'
+    + '<option value="limited"'+(f.impact==='limited'?' selected':'')+'>Limited</option>'
+    + '<option value="major"'+(f.impact==='major'?' selected':'')+'>Major</option>'
+    + '<option value="severe"'+(f.impact==='severe'?' selected':'')+'>Severe</option>'
+    + '</select></div>'
+    + '</div>'
     + '<div><label>Contrôles liés ('+problematicCtrls.length+' candidats)</label>'
-    + '<div style="border:.5px solid var(--border);border-radius:4px;max-height:280px;overflow-y:auto;background:#fafafa">'
+    + '<div style="border:.5px solid var(--border);border-radius:4px;max-height:240px;overflow-y:auto;background:#fafafa">'
     + ctrlsHtml
     + '</div></div>';
 
@@ -4654,6 +4688,10 @@ function showFindingModal(existing) {
     var title = document.getElementById('f-title').value.trim();
     if (!title) { toast('Titre obligatoire'); return; }
     var desc = document.getElementById('f-desc').value.trim();
+    var potentialRisk = document.getElementById('f-risk').value.trim();
+    var owner = document.getElementById('f-owner').value.trim();
+    var probability = document.getElementById('f-prob').value;
+    var impact = document.getElementById('f-impact').value;
     var checkedIds = Array.from(document.querySelectorAll('.f-ctrl-cb:checked')).map(function(cb){return cb.value;});
 
     if (!d.findings) d.findings = [];
@@ -4661,6 +4699,10 @@ function showFindingModal(existing) {
       d.findings[existing.idx] = Object.assign({}, d.findings[existing.idx], {
         title: title,
         desc: desc,
+        potentialRisk: potentialRisk,
+        owner: owner,
+        probability: probability,
+        impact: impact,
         controlIds: checkedIds,
       });
       addHist('edit', 'Finding "'+title+'" modifié');
@@ -4669,6 +4711,10 @@ function showFindingModal(existing) {
         id: 'f_'+Date.now(),
         title: title,
         desc: desc,
+        potentialRisk: potentialRisk,
+        owner: owner,
+        probability: probability,
+        impact: impact,
         controlIds: checkedIds,
         createdAt: new Date().toISOString(),
       });
