@@ -3265,10 +3265,10 @@ function renderDetContent(){
     // Étape 6 (index 5) : Testings — tests des contrôles uniquement
     html += renderTestsSection();
   } else if (CS === 6) {
-    // Étape 7 (index 6) : Report — Findings + Maturity (consolidation)
+    // Étape 7 (index 6) : Report — Header + Maturity (côte-à-côte) puis Findings
     html += renderAuditReportGenerateBanner();
+    html += renderHeaderAndMaturitySection();
     html += renderFindingsSection();
-    html += renderMaturitySection();
   } else if (CS === 8) {
     // Étape 9 (index 8) : Management Responses
     html += renderMgtRespSection();
@@ -4213,8 +4213,57 @@ function renderFindingsSection() {
   html += '</div>';
   return html;
 }
+function renderHeaderAndMaturitySection() {
+  var d = getAudData(CA);
+  if (!d.maturity) d.maturity = {level:'',notes:'',saved:false};
+  if (typeof d.execSummaryHeader === 'undefined') d.execSummaryHeader = '';
+
+  var MLEVELS = [
+    {key:'unsatisfactory',label:'Unsatisfactory',color:'#A32D2D',bg:'#FCEBEB'},
+    {key:'major',label:'Major Improvements',color:'#854F0B',bg:'#FAEEDA'},
+    {key:'some',label:'Some Improvements',color:'#1D6B45',bg:'#E1F5EE'},
+    {key:'effective',label:'Effective',color:'#3B6D11',bg:'#EAF3DE'},
+  ];
+
+  var html = '<div class="card" style="margin-bottom:.75rem">';
+  html += '<div style="display:grid;grid-template-columns:1.6fr 1fr;gap:14px">';
+
+  // ─── Colonne gauche : Header de l'Executive Summary ────────
+  html += '<div>';
+  html += '<div style="font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:4px">Executive Summary — Header</div>';
+  html += '<div style="font-size:10px;color:var(--text-3);margin-bottom:8px;font-style:italic">Texte d\'introduction qui apparaîtra en haut de la slide « Executive Summary - Findings ». La maturité est ajoutée automatiquement à la fin.</div>';
+  html += '<textarea id="exec-summary-header" placeholder="ex : The audit of the Renewals process identified improvement opportunities in operational efficiency. These weaknesses elevate the risk of missed renewals and lost revenue opportunities..." style="width:100%;min-height:160px;font-size:12px;padding:8px;border:1px solid var(--border);border-radius:4px;resize:vertical" onchange="setExecSummaryHeader(this.value)">'+(d.execSummaryHeader||'').replace(/</g,'&lt;')+'</textarea>';
+  html += '</div>';
+
+  // ─── Colonne droite : Maturity compacte ─────────────────────
+  html += '<div>';
+  html += '<div style="font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:4px">Overall Process Maturity'+(d.maturity.saved?' <span class="tag-new" style="font-size:9px;margin-left:6px">✓</span>':'')+'</div>';
+  html += '<div style="font-size:10px;color:var(--text-3);margin-bottom:8px;font-style:italic">Niveau global du process audité.</div>';
+  // Grid 2x2 des niveaux
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">';
+  MLEVELS.forEach(function(l){
+    var sel = d.maturity.level === l.key;
+    html += '<div onclick="setMaturity(\''+l.key+'\')" style="border:1.5px solid '+(sel?l.color:'var(--border)')+';border-radius:5px;padding:8px 10px;cursor:pointer;background:'+(sel?l.bg:'var(--bg-card)')+';font-size:11px;text-align:center;transition:all 0.15s"><strong style="color:'+l.color+'">'+l.label+'</strong></div>';
+  });
+  html += '</div>';
+  html += '<textarea id="maturity-notes" style="width:100%;min-height:60px;resize:vertical;font-size:11px;padding:6px;border:1px solid var(--border);border-radius:4px" placeholder="Justification (optionnel)...">'+(d.maturity.notes||'')+'</textarea>';
+  html += '<div style="display:flex;justify-content:flex-end;margin-top:6px"><button class="bp" style="font-size:11px;padding:4px 10px" onclick="saveMaturity()">Sauvegarder</button></div>';
+  html += '</div>';
+
+  html += '</div>'; // grid
+  html += '</div>'; // card
+  return html;
+}
+
+// Setter pour le header de l'exec summary
+async function setExecSummaryHeader(val) {
+  var d = getAudData(CA);
+  d.execSummaryHeader = val;
+  await saveAuditData(CA);
+}
+
+// Ancienne fonction conservée pour compat (pas appelée mais existe au cas où)
 function renderMaturitySection() {
-  // Conserver l'ancien rendu de la maturity (Phase 4)
   var d = getAudData(CA);
   if (!d.maturity) d.maturity = {level:'',notes:'',saved:false};
   var MLEVELS = [
