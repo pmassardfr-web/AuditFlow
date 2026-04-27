@@ -94,16 +94,23 @@ async function generateKickoffPptx(auditId) {
     return;
   }
 
-  // 2. Récupérer les données (avec fallback sur CA si auditId vide/invalide)
+  // 2. Récupérer les données globales (CA, AUDIT_PLAN, etc. sont dans le scope global du script principal)
+  // On utilise (0,eval) pour accéder à ces variables sans préfixe window.
+  const _AUDIT_PLAN = (typeof AUDIT_PLAN !== "undefined") ? AUDIT_PLAN : [];
+  const _CA = (typeof CA !== "undefined") ? CA : null;
+  const _PROCESSES = (typeof PROCESSES !== "undefined") ? PROCESSES : [];
+  const _RISK_UNIVERSE = (typeof RISK_UNIVERSE !== "undefined") ? RISK_UNIVERSE : [];
+  const _TM = (typeof TM !== "undefined") ? TM : [];
+
   let realAuditId = auditId;
-  let ap = (window.AUDIT_PLAN || []).find(a => a.id === realAuditId);
-  if (!ap && typeof window.CA !== 'undefined' && window.CA) {
-    realAuditId = window.CA;
-    ap = (window.AUDIT_PLAN || []).find(a => a.id === realAuditId);
+  let ap = _AUDIT_PLAN.find(a => a.id === realAuditId);
+  if (!ap && _CA) {
+    realAuditId = _CA;
+    ap = _AUDIT_PLAN.find(a => a.id === realAuditId);
     console.log('[KICKOFF] Fallback sur CA:', realAuditId);
   }
   if (!ap) {
-    console.error('[KICKOFF] Audit introuvable. auditId=', auditId, 'CA=', window.CA, 'AUDIT_PLAN length=', (window.AUDIT_PLAN||[]).length);
+    console.error('[KICKOFF] Audit introuvable. auditId=', auditId, 'CA=', _CA, 'AUDIT_PLAN length=', _AUDIT_PLAN.length);
     if (typeof toast === 'function') toast('Audit introuvable');
     return;
   }
@@ -118,13 +125,13 @@ async function generateKickoffPptx(auditId) {
   // Récupérer le nom du process
   const procIds = Array.isArray(ap.processIds) && ap.processIds.length ? ap.processIds : (ap.processId ? [ap.processId] : []);
   const procNames = procIds.map(id => {
-    const p = (window.PROCESSES || []).find(x => x.id === id);
+    const p = _PROCESSES.find(x => x.id === id);
     return p ? p.proc : null;
   }).filter(Boolean);
   const processName = procNames.join(' / ') || ap.titre || '—';
 
   // Récupérer les risques liés
-  const allRisks = (window.RISK_UNIVERSE || []);
+  const allRisks = _RISK_UNIVERSE;
   const linkedRisks = allRisks.filter(r => {
     if (!Array.isArray(r.processIds)) return false;
     return r.processIds.some(pid => procIds.includes(pid));
@@ -133,7 +140,7 @@ async function generateKickoffPptx(auditId) {
   // Récupérer les auditeurs
   const auditeurIds = Array.isArray(ap.auditeurs) ? ap.auditeurs : [];
   const auditeurs = auditeurIds.map(id => {
-    const tm = (window.TM || []).find(t => t.id === id);
+    const tm = _TM.find(t => t.id === id);
     return tm ? {name: tm.name, role: tm.role || 'Auditor'} : null;
   }).filter(Boolean);
 
