@@ -94,9 +94,20 @@ async function generateKickoffPptx(auditId) {
     return;
   }
 
-  // 2. Récupérer les données
-  const ap = (window.AUDIT_PLAN || []).find(a => a.id === auditId);
-  if (!ap) { if (typeof toast === 'function') toast('Audit introuvable'); return; }
+  // 2. Récupérer les données (avec fallback sur CA si auditId vide/invalide)
+  let realAuditId = auditId;
+  let ap = (window.AUDIT_PLAN || []).find(a => a.id === realAuditId);
+  if (!ap && typeof window.CA !== 'undefined' && window.CA) {
+    realAuditId = window.CA;
+    ap = (window.AUDIT_PLAN || []).find(a => a.id === realAuditId);
+    console.log('[KICKOFF] Fallback sur CA:', realAuditId);
+  }
+  if (!ap) {
+    console.error('[KICKOFF] Audit introuvable. auditId=', auditId, 'CA=', window.CA, 'AUDIT_PLAN length=', (window.AUDIT_PLAN||[]).length);
+    if (typeof toast === 'function') toast('Audit introuvable');
+    return;
+  }
+  auditId = realAuditId;
 
   const d = AUD_DATA && AUD_DATA[auditId] ? AUD_DATA[auditId] : {};
   const prep = d.kickoffPrep || {};
