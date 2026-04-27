@@ -100,7 +100,7 @@ async function generateKickoffPptx(auditId) {
   const _CA = (typeof CA !== "undefined") ? CA : null;
   const _PROCESSES = (typeof PROCESSES !== "undefined") ? PROCESSES : [];
   const _RISK_UNIVERSE = (typeof RISK_UNIVERSE !== "undefined") ? RISK_UNIVERSE : [];
-  const _TM = (typeof TM !== "undefined") ? TM : [];
+  const _TM = (typeof TM !== "undefined") ? TM : {};
 
   let realAuditId = auditId;
   let ap = _AUDIT_PLAN.find(a => a.id === realAuditId);
@@ -137,10 +137,10 @@ async function generateKickoffPptx(auditId) {
     return r.processIds.some(pid => procIds.includes(pid));
   });
 
-  // Récupérer les auditeurs
+  // Récupérer les auditeurs (TM est un objet {id: {name, role}}, pas un Array)
   const auditeurIds = Array.isArray(ap.auditeurs) ? ap.auditeurs : [];
   const auditeurs = auditeurIds.map(id => {
-    const tm = _TM.find(t => t.id === id);
+    const tm = _TM && _TM[id];
     return tm ? {name: tm.name, role: tm.role || 'Auditor'} : null;
   }).filter(Boolean);
 
