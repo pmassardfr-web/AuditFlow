@@ -3253,6 +3253,9 @@ function renderDetContent(){
   if (CS === 1) {
     // Étape 2 (index 1) : Work Program — préparation du Kick Off
     html += renderKickoffPrepSection();
+  } else if (CS === 2) {
+    // Étape 3 (index 2) : Audit Kick Off — bouton de génération mis en avant
+    html += renderKickoffGenerateBanner();
   } else if (CS === 4) {
     // Étape 5 (index 4) : ITW : WCGW & Contrôles (groupés)
     html += renderRiskSection();
@@ -3388,6 +3391,10 @@ function renderDocumentRow(label, doc, isExpected, isAdmin) {
   html += '<div style="font-size:12px;font-weight:500;display:flex;align-items:center;gap:6px">';
   html += '<span>'+label+'</span>';
   if (isExpected) html += '<span style="font-size:9px;color:var(--text-3)">(attendu)</span>';
+  // Bouton génération auto pour Kick-Off Presentation à l'étape 3 (CS=2)
+  if (label === 'Kick-Off Presentation' && CS === 2) {
+    html += '<button class="bs" style="font-size:10px;padding:2px 7px;background:#EEEDFE;color:#3C3489;border-color:#CECBF6" onclick="generateKickoffPptx(CA);event.stopPropagation();">⬇ Générer</button>';
+  }
   html += '</div>';
   if (hasDoc) {
     html += '<div style="font-size:10px;color:var(--text-3);margin-top:2px">'+(doc.name||'fichier')+(doc.size?' — '+doc.size:'')+(doc.uploadedBy?' · par '+doc.uploadedBy:'')+'</div>';
@@ -3445,46 +3452,89 @@ function renderNotesSection() {
   return html;
 }
 
+// ─── ÉTAPE 3 (CS=2) : Bandeau de génération du Kick Off ───────────────
+function renderKickoffGenerateBanner() {
+  var d = getAudData(CA);
+  var prep = d.kickoffPrep || {};
+  var subProcesses = Array.isArray(prep.subProcesses) ? prep.subProcesses : [];
+  var interviews = Array.isArray(prep.interviews) ? prep.interviews : [];
+  var planning = prep.planning || {};
+
+  // Compter ce qui est rempli
+  var subProcCount = subProcesses.length;
+  var interviewsCount = interviews.length;
+  var planningCount = Object.values(planning).filter(Boolean).length;
+
+  var html = '<div class="card" style="margin-bottom:.75rem;background:linear-gradient(135deg,#EEEDFE 0%,#F5F4FE 100%);border:.5px solid #CECBF6">';
+  html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">';
+  html += '<div style="flex:1;min-width:200px">';
+  html += '<div style="font-size:14px;font-weight:600;color:#3C3489;margin-bottom:4px">📊 Kick Off Presentation</div>';
+  html += '<div style="font-size:11px;color:#534AB7;margin-bottom:8px">Génération automatique du PowerPoint à partir des données de l\'audit.</div>';
+  html += '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:#3C3489">';
+  html += '<span>'+(subProcCount?'✓':'○')+' Sous-processus ('+subProcCount+')</span>';
+  html += '<span>'+(interviewsCount?'✓':'○')+' Interviews ('+interviewsCount+')</span>';
+  html += '<span>'+(planningCount?'✓':'○')+' Planning ('+planningCount+'/5)</span>';
+  html += '</div>';
+  html += '</div>';
+  html += '<button class="bp" style="font-size:13px;padding:8px 18px;background:#3C3489;color:#fff;font-weight:500" onclick="generateKickoffPptx(CA)">⬇ Générer le Kick Off</button>';
+  html += '</div>';
+  if (!subProcCount && !interviewsCount && !planningCount) {
+    html += '<div style="font-size:10px;color:#854F0B;margin-top:10px;padding:6px 10px;background:#FAEEDA;border-radius:4px;font-style:italic">⚠ Aucune information saisie en étape Work Program. Le PowerPoint sera généré avec des sections vides à compléter manuellement.</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
 // ─── ÉTAPE 2 (CS=1) : Préparation du Kick Off ─────────────────────────
 function renderKickoffPrepSection() {
   var d = getAudData(CA);
   if (!d.kickoffPrep) d.kickoffPrep = {};
   var p = d.kickoffPrep;
-  if (!p.scope) p.scope = {processOwner:'', periodFrom:'', periodTo:'', docsList:'', outOfScope:''};
+  if (!Array.isArray(p.subProcesses)) p.subProcesses = [];
   if (!Array.isArray(p.interviews)) p.interviews = [];
   if (!p.planning) p.planning = {kickOff:'', interviews:'', testing:'', report:'', restitution:''};
 
   var html = '';
 
-  // ── SECTION 1 : Scope ──────────────────────────────────────
+  // ── SECTION 1 : Périmètre & Scope (sous-processus) ─────────
   html += '<div class="card" style="margin-bottom:.75rem">';
-  html += '<div style="font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:4px">Périmètre & Scope</div>';
-  html += '<div style="font-size:10px;color:var(--text-3);margin-bottom:10px;font-style:italic">Apparaîtra en slide « Audit Scope » du Kick Off Presentation.</div>';
-  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px">';
-  html += '<div>';
-  html += '<label style="font-size:10px;color:var(--text-3);display:block;margin-bottom:3px">Process Owner / Contact métier</label>';
-  html += '<input value="'+(p.scope.processOwner||'').replace(/"/g,'&quot;')+'" placeholder="ex : Marie Dupont — Finance Director" onchange="setKickoffScope(\'processOwner\',this.value)" style="width:100%;font-size:11px;padding:5px 8px;border:1px solid var(--border);border-radius:4px"/>';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">';
+  html += '<span style="font-size:12px;font-weight:600;color:var(--text-2)">Périmètre & Scope <span style="font-size:10px;font-weight:400;color:var(--text-3)">('+p.subProcesses.length+' sous-processus)</span></span>';
+  html += '<button class="bs" style="font-size:11px;padding:3px 9px" onclick="addSubProcess()">+ Ajouter un sous-processus</button>';
   html += '</div>';
-  html += '<div>';
-  html += '<label style="font-size:10px;color:var(--text-3);display:block;margin-bottom:3px">Période auditée</label>';
-  html += '<div style="display:flex;gap:4px;align-items:center">';
-  html += '<input type="date" value="'+(p.scope.periodFrom||'')+'" onchange="setKickoffScope(\'periodFrom\',this.value)" style="flex:1;font-size:11px;padding:5px 8px;border:1px solid var(--border);border-radius:4px"/>';
-  html += '<span style="font-size:11px;color:var(--text-3)">→</span>';
-  html += '<input type="date" value="'+(p.scope.periodTo||'')+'" onchange="setKickoffScope(\'periodTo\',this.value)" style="flex:1;font-size:11px;padding:5px 8px;border:1px solid var(--border);border-radius:4px"/>';
-  html += '</div>';
-  html += '</div>';
-  html += '</div>';
-  html += '<div style="margin-bottom:8px">';
-  html += '<label style="font-size:10px;color:var(--text-3);display:block;margin-bottom:3px">Documents demandés / périmètre détaillé</label>';
-  html += '<textarea onchange="setKickoffScope(\'docsList\',this.value)" placeholder="ex : journaux comptables, contrats clients clés, états bancaires, exports SAP..." style="width:100%;min-height:60px;font-size:11px;padding:6px 8px;border:1px solid var(--border);border-radius:4px;resize:vertical">'+(p.scope.docsList||'').replace(/</g,'&lt;')+'</textarea>';
-  html += '</div>';
-  html += '<div>';
-  html += '<label style="font-size:10px;color:var(--text-3);display:block;margin-bottom:3px">Hors scope</label>';
-  html += '<textarea onchange="setKickoffScope(\'outOfScope\',this.value)" placeholder="ex : process déjà couverts par un autre audit, périmètre géographique exclu..." style="width:100%;min-height:50px;font-size:11px;padding:6px 8px;border:1px solid var(--border);border-radius:4px;resize:vertical">'+(p.scope.outOfScope||'').replace(/</g,'&lt;')+'</textarea>';
-  html += '</div>';
+  html += '<div style="font-size:10px;color:var(--text-3);margin-bottom:10px;font-style:italic">Découpage du processus audité en sous-processus avec leur description et owners. Apparaîtra en slide « Audit Scope » du Kick Off.</div>';
+
+  if (!p.subProcesses.length) {
+    html += '<div style="font-size:11px;color:var(--text-3);font-style:italic;padding:.5rem;text-align:center;border:1px dashed var(--border);border-radius:4px">Aucun sous-processus défini. Cliquez sur « + Ajouter un sous-processus ».</div>';
+  } else {
+    p.subProcesses.forEach(function(sp, idx){
+      html += '<div style="border:.5px solid var(--border);border-radius:6px;padding:10px;margin-bottom:8px;background:#fafafa">';
+      html += '<div style="display:grid;grid-template-columns:1.5fr 2fr 1.5fr auto;gap:8px;align-items:start">';
+      // Nom
+      html += '<div>';
+      html += '<label style="font-size:9px;color:var(--text-3);display:block;margin-bottom:2px">Sous-processus</label>';
+      html += '<input value="'+(sp.name||'').replace(/"/g,'&quot;')+'" placeholder="ex : Order entry" onchange="setSubProcess('+idx+',\'name\',this.value)" style="width:100%;font-size:11px;padding:5px 7px;border:1px solid var(--border);border-radius:3px"/>';
+      html += '</div>';
+      // Description
+      html += '<div>';
+      html += '<label style="font-size:9px;color:var(--text-3);display:block;margin-bottom:2px">Description</label>';
+      html += '<textarea onchange="setSubProcess('+idx+',\'description\',this.value)" placeholder="ex : Saisie commandes clients dans SAP" style="width:100%;min-height:48px;font-size:11px;padding:5px 7px;border:1px solid var(--border);border-radius:3px;resize:vertical">'+(sp.description||'').replace(/</g,'&lt;')+'</textarea>';
+      html += '</div>';
+      // Owner(s) + email
+      html += '<div>';
+      html += '<label style="font-size:9px;color:var(--text-3);display:block;margin-bottom:2px">Owner(s)</label>';
+      html += '<input value="'+(sp.owners||'').replace(/"/g,'&quot;')+'" placeholder="ex : J. Smith, M. Dupont" onchange="setSubProcess('+idx+',\'owners\',this.value)" style="width:100%;font-size:11px;padding:5px 7px;border:1px solid var(--border);border-radius:3px;margin-bottom:4px"/>';
+      html += '<input value="'+(sp.email||'').replace(/"/g,'&quot;')+'" type="email" placeholder="email facultatif" onchange="setSubProcess('+idx+',\'email\',this.value)" style="width:100%;font-size:10px;padding:4px 7px;border:1px solid var(--border);border-radius:3px;color:var(--text-2)"/>';
+      html += '</div>';
+      // Bouton supprimer
+      html += '<button class="bd" style="font-size:11px;padding:4px 8px;align-self:start;margin-top:14px" onclick="removeSubProcess('+idx+')" title="Supprimer">×</button>';
+      html += '</div>';
+      html += '</div>';
+    });
+  }
   html += '</div>';
 
-  // ── SECTION 2 : Interviews planifiées ──────────────────────
+  // ── SECTION 2 : Interviews planifiées (inchangée) ──────────
   html += '<div class="card" style="margin-bottom:.75rem">';
   html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">';
   html += '<span style="font-size:12px;font-weight:600;color:var(--text-2)">Interviews planifiées <span style="font-size:10px;font-weight:400;color:var(--text-3)">('+p.interviews.length+')</span></span>';
@@ -3495,7 +3545,6 @@ function renderKickoffPrepSection() {
   if (!p.interviews.length) {
     html += '<div style="font-size:11px;color:var(--text-3);font-style:italic;padding:.5rem;text-align:center;border:1px dashed var(--border);border-radius:4px">Aucune interview planifiée. Cliquez sur « + Ajouter une interview ».</div>';
   } else {
-    // En-tête de tableau
     html += '<div style="display:grid;grid-template-columns:1fr 1.2fr 1.4fr 1fr 30px;gap:6px;font-size:10px;color:var(--text-3);font-weight:500;padding:4px 0;border-bottom:.5px solid var(--border)">';
     html += '<span>Département</span><span>Main contact</span><span>Email</span><span>Timeslot</span><span></span>';
     html += '</div>';
@@ -3511,7 +3560,7 @@ function renderKickoffPrepSection() {
   }
   html += '</div>';
 
-  // ── SECTION 3 : Planning - Dates clés ──────────────────────
+  // ── SECTION 3 : Planning - Dates clés (inchangée) ──────────
   html += '<div class="card" style="margin-bottom:.75rem">';
   html += '<div style="font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:4px">Planning — Dates clés</div>';
   html += '<div style="font-size:10px;color:var(--text-3);margin-bottom:10px;font-style:italic">Apparaîtra en slide « Key Deadlines » du Kick Off (transformé en « Week of [date] »).</div>';
@@ -3535,14 +3584,31 @@ function renderKickoffPrepSection() {
   return html;
 }
 
-// Setters Kickoff Prep
-async function setKickoffScope(field, val) {
+// Setters Sous-processus
+async function addSubProcess() {
   var d = getAudData(CA);
   if (!d.kickoffPrep) d.kickoffPrep = {};
-  if (!d.kickoffPrep.scope) d.kickoffPrep.scope = {};
-  d.kickoffPrep.scope[field] = val;
+  if (!Array.isArray(d.kickoffPrep.subProcesses)) d.kickoffPrep.subProcesses = [];
+  d.kickoffPrep.subProcesses.push({name:'', description:'', owners:'', email:''});
+  await saveAuditData(CA);
+  document.getElementById('det-content').innerHTML = renderDetContent();
+}
+async function setSubProcess(idx, field, val) {
+  var d = getAudData(CA);
+  if (!d.kickoffPrep || !Array.isArray(d.kickoffPrep.subProcesses)) return;
+  if (!d.kickoffPrep.subProcesses[idx]) return;
+  d.kickoffPrep.subProcesses[idx][field] = val;
   await saveAuditData(CA);
 }
+async function removeSubProcess(idx) {
+  var d = getAudData(CA);
+  if (!d.kickoffPrep || !Array.isArray(d.kickoffPrep.subProcesses)) return;
+  d.kickoffPrep.subProcesses.splice(idx, 1);
+  await saveAuditData(CA);
+  document.getElementById('det-content').innerHTML = renderDetContent();
+}
+
+// Setters Kickoff Prep (planning + interviews — inchangés)
 async function setKickoffPlanning(field, val) {
   var d = getAudData(CA);
   if (!d.kickoffPrep) d.kickoffPrep = {};
