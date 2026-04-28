@@ -652,59 +652,62 @@ async function generateAuditReportPptx(auditId) {
   ar_addFooter(pres, sAd);
 
   // ════════════════════════════════════════════════════════════════════
-  // SLIDE — APPENDIX 1 : RISK VALUATION MATRIX
+  // SLIDE — APPENDIX 1 : RISK VALUATION MATRIX (depuis Risk Assessment)
   // ════════════════════════════════════════════════════════════════════
   const sA1 = pres.addSlide();
   ar_addTitleBar(pres, sA1, "Appendix 1", "Risk valuation matrix");
-  sA1.addText("Risks are assessed based on inherent impact and likelihood. This evaluation is theoretical, performed prior to considering the control environment.", {
+
+  // Charger les données de Risk Assessment depuis DB (paramétrées dans Référentiels)
+  const ra = (typeof DB !== "undefined" && DB.riskAssessment) ? DB.riskAssessment : null;
+  const raIntro = (ra && ra.intro) || "Risks are assessed based on their inherent impact and likelihood of occurrence. This evaluation is theoretical and performed prior to considering the control environment in place within the Group.";
+  const raImpacts = (ra && Array.isArray(ra.impacts) && ra.impacts.length === 4) ? ra.impacts : ['Minor', 'Limited', 'Major', 'Severe'];
+  const raRows = (ra && Array.isArray(ra.rows) && ra.rows.length) ? ra.rows : [
+    {label: 'Financial', cells: ['Revenue < €7M or <1%\nROA < €1M or <1%','Revenue €7–14M or 1–2%','Revenue €14–70M or 2–10%','Revenue > €70M or >10%']},
+    {label: 'Legal',     cells: ['Minor breach','Fines <100K€','Fines 100K-1M€','Fines >1M€']},
+    {label: 'Reputation',cells: ['Internal exposure','Limited external','Significant external','Extensive external']},
+    {label: 'Operations',cells: ['Minor effects','Limited effects','Major effects','Severe effects']},
+  ];
+  const raLikelihoods = (ra && Array.isArray(ra.likelihoods) && ra.likelihoods.length) ? ra.likelihoods : [
+    {label:'Rare', desc:'Likely to occur in Exceptional cases'},
+    {label:'Unlikely', desc:'Likely to occur in a particular set of conditions'},
+    {label:'Possible', desc:'May occur at a given time'},
+    {label:'Certain', desc:'Group already exposed or currently happening'},
+  ];
+
+  sA1.addText(raIntro, {
     x: 0.5, y: 1.5, w: 12.3, h: 0.6,
     fontSize: 11, italic: true, color: AR_COLORS.textGray, fontFace: "Calibri",
   });
-  const riskRows = [
-    [
-      {text: "IMPACT", options: {bold: true, color: AR_COLORS.white, fill: {color: AR_COLORS.navy}, align: "center"}},
-      {text: "Minor", options: {bold: true, color: AR_COLORS.white, fill: {color: AR_COLORS.navy}, align: "center"}},
-      {text: "Limited", options: {bold: true, color: AR_COLORS.white, fill: {color: AR_COLORS.navy}, align: "center"}},
-      {text: "Major", options: {bold: true, color: AR_COLORS.white, fill: {color: AR_COLORS.navy}, align: "center"}},
-      {text: "Severe", options: {bold: true, color: AR_COLORS.white, fill: {color: AR_COLORS.navy}, align: "center"}},
-    ],
-    [
-      {text: "Financial", options: {bold: true, fill: {color: AR_COLORS.grayLight}}},
-      {text: "Revenue: <3M or <1%", options: {fontSize: 9}},
-      {text: "Revenue: 3-6M or 1-2%", options: {fontSize: 9}},
-      {text: "Revenue: 6-32M or 2-10%", options: {fontSize: 9}},
-      {text: "Revenue: >32M or >10%", options: {fontSize: 9}},
-    ],
-    [
-      {text: "Legal/regulatory", options: {bold: true, fill: {color: AR_COLORS.grayLight}}},
-      {text: "Minor breach", options: {fontSize: 9}},
-      {text: "Fines <100K€", options: {fontSize: 9}},
-      {text: "Fines 100K-1M€", options: {fontSize: 9}},
-      {text: "Fines >1M€", options: {fontSize: 9}},
-    ],
-    [
-      {text: "Reputational", options: {bold: true, fill: {color: AR_COLORS.grayLight}}},
-      {text: "Internal exposure", options: {fontSize: 9}},
-      {text: "Limited external", options: {fontSize: 9}},
-      {text: "Significant external", options: {fontSize: 9}},
-      {text: "Extensive external", options: {fontSize: 9}},
-    ],
-    [
-      {text: "Operational", options: {bold: true, fill: {color: AR_COLORS.grayLight}}},
-      {text: "Minor effects", options: {fontSize: 9}},
-      {text: "Limited effects", options: {fontSize: 9}},
-      {text: "Major effects", options: {fontSize: 9}},
-      {text: "Severe effects", options: {fontSize: 9}},
-    ],
+
+  // Build header row: Impact + 4 impacts
+  const headerRow = [
+    {text: "IMPACT", options: {bold: true, color: AR_COLORS.white, fill: {color: AR_COLORS.navy}, align: "center"}},
   ];
-  sA1.addTable(riskRows, {
+  raImpacts.forEach(imp => {
+    headerRow.push({text: imp, options: {bold: true, color: AR_COLORS.white, fill: {color: AR_COLORS.navy}, align: "center"}});
+  });
+  // Build data rows
+  const dataRows = raRows.map(row => {
+    const r = [{text: row.label || '', options: {bold: true, fill: {color: AR_COLORS.grayLight}, valign: "top"}}];
+    (row.cells || []).slice(0, 4).forEach(c => {
+      r.push({text: c || '', options: {fontSize: 9, valign: "top"}});
+    });
+    // Pad with empty cells if needed
+    while (r.length < 5) r.push({text: '', options: {fontSize: 9}});
+    return r;
+  });
+  const allRiskRows = [headerRow, ...dataRows];
+
+  sA1.addTable(allRiskRows, {
     x: 0.4, y: 2.3, w: 12.5,
     fontSize: 10, fontFace: "Calibri",
     border: {type: "solid", pt: 0.5, color: AR_COLORS.grayMed},
-    rowH: [0.4, 0.65, 0.65, 0.65, 0.55],
     colW: [1.7, 2.7, 2.7, 2.7, 2.7],
   });
-  sA1.addText("Likelihood: Rare → Unlikely → Possible → Probable / Certain", {
+
+  // Likelihood text en bas (combiné en une ligne)
+  const likelihoodLine = "Likelihood: " + raLikelihoods.map(l => l.label).join(' → ');
+  sA1.addText(likelihoodLine, {
     x: 0.5, y: 6.2, w: 12, h: 0.4,
     fontSize: 11, italic: true, color: AR_COLORS.navy, fontFace: "Calibri",
   });
