@@ -2311,7 +2311,10 @@ function clearBUCountryFilter() {
 //  PLANIFICATION (Gantt — inchangé)
 // ══════════════════════════════════════════════════════════════
 V['planification']=()=>`
-  <div class="topbar"><div class="tbtitle">Planification</div></div>
+  <div class="topbar">
+    <div class="tbtitle">Planification</div>
+    ${CU&&CU.role==='admin'?'<button class="bp ao" onclick="showAddAuditFromPlanif()">+ Créer un audit</button>':''}
+  </div>
   <div class="content">
     <div style="display:flex;gap:8px;margin-bottom:1rem;align-items:center">
       <select id="f-pl" onchange="renderGantt()">
@@ -2326,6 +2329,34 @@ V['planification']=()=>`
     <div class="gw" id="gantt-wrap"></div>
   </div>`;
 I['planification']=()=>renderGantt();
+
+// ── Création d'un audit depuis Planification (réutilise la modale Plan Audit, pré-remplit l'année) ──
+function showAddAuditFromPlanif(){
+  // Lire l'année du filtre courant
+  var fy = document.getElementById('f-pyr');
+  var prefilledYear = null;
+  if (fy && fy.value && fy.value !== 'all') {
+    prefilledYear = parseInt(fy.value);
+  }
+  // Si "all", utiliser l'année courante
+  if (!prefilledYear) prefilledYear = new Date().getFullYear();
+
+  // Construire un audit "stub" avec uniquement l'année pré-remplie
+  // pour que auditModalBody pré-sélectionne le bon <option>
+  var stub = {annee: prefilledYear};
+  openModal('Nouvel audit', auditModalBody(stub), async function(){
+    var data = collectAuditModal();
+    if (!data) return;
+    var newAp = Object.assign({id:'ap'+Date.now()}, data);
+    AUDIT_PLAN.push(newAp);
+    await saveAuditPlan(newAp);
+    addHist('add','Audit "'+data.titre+'" ajouté au plan');
+    // Refresh du Gantt
+    renderGantt();
+    toast('Audit créé ✓');
+  }, {wide:true});
+  attachProcCheckboxListeners();
+}
 
 function renderGantt(){
   var ft=document.getElementById('f-pl')&&document.getElementById('f-pl').value||'all';
