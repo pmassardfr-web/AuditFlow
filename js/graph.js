@@ -491,6 +491,20 @@ async function loadAllData() {
       console.log('[SP] ControlsLibrary loaded:', CONTROLS_LIBRARY.length, 'controls');
     } catch(e){ console.warn('[SP] AF_ControlsLibrary not found or empty:', e.message); CONTROLS_LIBRARY = []; }
 
+    // Charger Risk Assessment (1 seul item dans AF_RiskAssessment)
+    try {
+      var raRaw = await listItems('AF_RiskAssessment');
+      if (raRaw.length && raRaw[0].fields && raRaw[0].fields.payload_json) {
+        DB.riskAssessment = tryParse(raRaw[0].fields.payload_json, null);
+        console.log('[SP] RiskAssessment loaded');
+      } else {
+        DB.riskAssessment = null;
+      }
+    } catch(e){
+      console.warn('[SP] AF_RiskAssessment not found or empty:', e.message);
+      DB.riskAssessment = null;
+    }
+
     // Synchroniser TM et AVC avec les utilisateurs SharePoint
     syncTeamMembers();
 
@@ -514,13 +528,15 @@ async function loadAuditData(auditId) {
         prepNotes:tryParse(f.prep_notes_json,{}),
         revNotes:tryParse(f.rev_notes_json,{}),
         wcgw:tryParse(f.wcgw_json,{}),
+        kickoffPrep:tryParse(f.kickoff_prep_json,{}),
+        execSummaryHeader:f.exec_summary_header||'',
       };
     } else {
-      DB.auditData[auditId] = {tasks:{},controls:{},findings:[],mgtResp:[],docs:[],notes:'',maturity:null,riskLinks:{},auditRisks:[],stepStates:{},prepNotes:{},revNotes:{},wcgw:{}};
+      DB.auditData[auditId] = {tasks:{},controls:{},findings:[],mgtResp:[],docs:[],notes:'',maturity:null,riskLinks:{},auditRisks:[],stepStates:{},prepNotes:{},revNotes:{},wcgw:{},kickoffPrep:{},execSummaryHeader:''};
     }
   } catch(e) {
     console.warn('[SP] loadAuditData error:', e.message);
-    DB.auditData[auditId] = {tasks:{},controls:{},findings:[],mgtResp:[],docs:[],notes:'',maturity:null,riskLinks:{},auditRisks:[],stepStates:{},prepNotes:{},revNotes:{},wcgw:{}};
+    DB.auditData[auditId] = {tasks:{},controls:{},findings:[],mgtResp:[],docs:[],notes:'',maturity:null,riskLinks:{},auditRisks:[],stepStates:{},prepNotes:{},revNotes:{},wcgw:{},kickoffPrep:{},execSummaryHeader:''};
   }
   AUD_DATA[auditId] = DB.auditData[auditId];
   return DB.auditData[auditId];
@@ -539,8 +555,23 @@ async function saveAuditData(auditId) {
     prep_notes_json:JSON.stringify(d.prepNotes||{}),
     rev_notes_json:JSON.stringify(d.revNotes||{}),
     wcgw_json:JSON.stringify(d.wcgw||{}),
+    kickoff_prep_json:JSON.stringify(d.kickoffPrep||{}),
+    exec_summary_header:d.execSummaryHeader||'',
     Title:auditId,
   });
+}
+
+// ─── Risk Assessment : sauvegarde dans liste AF_RiskAssessment (1 seul item) ──
+async function saveRiskAssessment(payload) {
+  if (!payload) return;
+  // On utilise toujours l'id 'global' pour ce singleton
+  await spUpsert('AF_RiskAssessment', 'global', {
+    payload_json: JSON.stringify(payload),
+    Title: 'global',
+  });
+  // Mettre à jour DB en mémoire
+  DB.riskAssessment = JSON.parse(JSON.stringify(payload));
+  console.log('[SP] RiskAssessment saved');
 }
 
 async function saveAuditPlan(ap) {
