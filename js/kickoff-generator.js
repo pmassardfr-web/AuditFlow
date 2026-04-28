@@ -138,12 +138,29 @@ async function generateKickoffPptx(auditId) {
     return r.processIds.some(pid => procIds.includes(pid));
   });
 
-  // Récupérer les auditeurs (TM est un objet {id: {name, role}}, pas un Array)
+  // Récupérer les auditeurs (TM est un objet {id: {name, role, photoFilename, experience, academics}})
   const auditeurIds = Array.isArray(ap.auditeurs) ? ap.auditeurs : [];
   const auditeurs = auditeurIds.map(id => {
     const tm = _TM && _TM[id];
-    return tm ? {name: tm.name, role: tm.role || 'Auditor'} : null;
+    return tm ? {
+      name: tm.name,
+      role: tm.role || 'Auditor',
+      photoFilename: tm.photoFilename || '',
+      experience: tm.experience || '',
+      academics: tm.academics || '',
+    } : null;
   }).filter(Boolean);
+
+  // Pre-load all photos in parallel (data URLs)
+  if (typeof getTeamPhotoDataUrl === 'function') {
+    await Promise.all(auditeurs.map(async function(a){
+      if (a.photoFilename) {
+        try {
+          a.photoDataUrl = await getTeamPhotoDataUrl(a.photoFilename);
+        } catch(e){ a.photoDataUrl = null; }
+      }
+    }));
+  }
 
   // Titre court (pour bandeau)
   const auditTitleShort = `${processName} – ${ap.annee || new Date().getFullYear()}`;
@@ -498,35 +515,53 @@ async function generateKickoffPptx(auditId) {
     const startX = (13.33 - totalWidth) / 2;
     auditeurs.slice(0, 3).forEach((a, i) => {
       const x = startX + i * (cardWidth + 0.3);
+      // Card background
       s8.addShape(pres.ShapeType.rect, {
-        x: x, y: 1.7, w: cardWidth, h: 4,
+        x: x, y: 1.7, w: cardWidth, h: 4.5,
         line: {color: KO_COLORS.grayMed, width: 0.5}, fill: {color: KO_COLORS.white},
       });
-      s8.addShape(pres.ShapeType.ellipse, {
-        x: x + (cardWidth - 1.2) / 2, y: 2.0, w: 1.2, h: 1.2,
-        fill: {color: KO_COLORS.navy}, line: {type: "none"},
-      });
-      s8.addText(ko_initials(a.name), {
-        x: x + (cardWidth - 1.2) / 2, y: 2.0, w: 1.2, h: 1.2,
-        fontSize: 28, bold: true, color: KO_COLORS.white,
-        fontFace: "Calibri", align: "center", valign: "middle",
-      });
+      // Photo or initials
+      const cx = x + (cardWidth - 1.2) / 2;
+      const cy = 2.0;
+      if (a.photoDataUrl) {
+        // Add image — PptxGenJS clips image to circle if we use sizing="contain" with rect layout
+        s8.addImage({
+          data: a.photoDataUrl,
+          x: cx, y: cy, w: 1.2, h: 1.2,
+          sizing: { type: 'cover', w: 1.2, h: 1.2 },
+          rounding: true,
+        });
+      } else {
+        // Fallback initials
+        s8.addShape(pres.ShapeType.ellipse, {
+          x: cx, y: cy, w: 1.2, h: 1.2,
+          fill: {color: KO_COLORS.navy}, line: {type: "none"},
+        });
+        s8.addText(ko_initials(a.name), {
+          x: cx, y: cy, w: 1.2, h: 1.2,
+          fontSize: 28, bold: true, color: KO_COLORS.white,
+          fontFace: "Calibri", align: "center", valign: "middle",
+        });
+      }
+      // Name
       s8.addText(a.name, {
         x: x, y: 3.4, w: cardWidth, h: 0.5,
         fontSize: 18, bold: true, color: KO_COLORS.navy,
         fontFace: "Calibri", align: "center",
       });
+      // Role
       s8.addText(a.role, {
         x: x, y: 3.9, w: cardWidth, h: 0.4,
         fontSize: 13, color: KO_COLORS.textGray, italic: true,
         fontFace: "Calibri", align: "center",
       });
+      // Experience + Academics (real values from TM)
       s8.addText([
-        {text: "Experience: ", options: {bold: true, fontSize: 11, color: KO_COLORS.textDark, fontFace: "Calibri"}},
-        {text: "—", options: {fontSize: 11, color: KO_COLORS.textDark, fontFace: "Calibri"}},
-        {text: "\nAcademics: ", options: {bold: true, fontSize: 11, color: KO_COLORS.textDark, fontFace: "Calibri"}},
-        {text: "—", options: {fontSize: 11, color: KO_COLORS.textDark, fontFace: "Calibri"}},
-      ], { x: x + 0.3, y: 4.6, w: cardWidth - 0.6, h: 1.0 });
+        {text: "Experience: ", options: {bold: true, fontSize: 10, color: KO_COLORS.textDark, fontFace: "Calibri"}},
+        {text: (a.experience || '—'), options: {fontSize: 10, color: KO_COLORS.textDark, fontFace: "Calibri"}},
+        {text: "\nAcademics: ", options: {bold: true, fontSize: 10, color: KO_COLORS.textDark, fontFace: "Calibri"}},
+        {text: (a.academics || '—'), options: {fontSize: 10, color: KO_COLORS.textDark, fontFace: "Calibri"}},
+      ], { x: x + 0.25, y: 4.5, w: cardWidth - 0.5, h: 1.6, valign: "top" });
     });
   }
   ko_addFooter(pres, s8);
