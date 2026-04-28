@@ -365,6 +365,7 @@ async function loadAllData() {
     DB.users = usersRaw.map(function(r){ var f=r.fields; return {
       id:f.af_id, name:f.name||f.Title, email:f.email, role:f.role||'auditeur',
       initials:f.initials||'', status:f.status||'actif', source:f.source||'local',
+      experience:f.experience||'', academics:f.academics||'', photoFilename:f.photo_filename||'',
     };});
 
     DB.auditPlan = planRaw.map(function(r){
@@ -621,7 +622,78 @@ async function saveUser(user) {
   await spUpsert('AF_Users', user.id, {
     email:user.email, name:user.name, role:user.role, initials:user.initials||'',
     status:user.status||'actif', source:user.source||'local', Title:user.name,
+    experience:user.experience||'', academics:user.academics||'',
+    photo_filename:user.photoFilename||'',
   });
+}
+
+// ─── Upload photo de team member ──────────────────────────────────────
+// Stratégie : on stocke les photos dans la doc library par défaut, sous /AuditFlow/TeamPhotos/
+// Le filename est prévisible : tm_<userId>.<ext>
+async function uploadTeamPhoto(userId, file) {
+  if (typeof CU !== 'undefined' && CU && CU.role === 'viewer') {
+    if (typeof toast === 'function') toast('Accès en lecture seule');
+    return null;
+  }
+  // Extraire l'extension
+  var ext = (file.name.split('.').pop() || 'png').toLowerCase();
+  if (!['png','jpg','jpeg','gif','webp'].includes(ext)) {
+    throw new Error('Format de photo non supporté (utiliser PNG, JPG, GIF ou WebP)');
+  }
+  var fileName = 'tm_' + userId + '.' + ext;
+
+  var driveId = await getDriveId();
+  var uploadPath = '/drives/' + driveId + '/root:/AuditFlow/TeamPhotos/' + fileName + ':/content';
+  var token = await getGraphToken();
+  var res = await fetch('https://graph.microsoft.com/v1.0' + uploadPath, {
+    method: 'PUT',
+    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': file.type || 'application/octet-stream' },
+    body: file,
+  });
+  if (!res.ok) throw new Error('Upload photo failed: ' + res.status);
+  var data = await res.json();
+
+  // Mettre à jour le user en mémoire + SharePoint
+  var u = (DB.users || []).find(function(x){return x.id===userId;});
+  if (u) u.photoFilename = fileName;
+  if (TM[userId]) TM[userId].photoFilename = fileName;
+
+  // Sauver dans AF_Users
+  if (u) await saveUser(u);
+
+  console.log('[SP] Photo uploaded:', fileName);
+  return { fileName: fileName, webUrl: data.webUrl, itemId: data.id };
+}
+
+// ─── Récupérer une photo team comme data URL (base64) pour usage dans pptx ───
+// Cette fonction est utilisée par kickoff-generator pour embarquer la photo dans le pptx
+async function getTeamPhotoDataUrl(filename) {
+  if (!filename) return null;
+  try {
+    var driveId = await getDriveId();
+    var token = await getGraphToken();
+    // Récupérer le contenu binaire
+    var fetchPath = '/drives/' + driveId + '/root:/AuditFlow/TeamPhotos/' + filename + ':/content';
+    var res = await fetch('https://graph.microsoft.com/v1.0' + fetchPath, {
+      method: 'GET',
+      headers: { 'Authorization': 'Bearer ' + token },
+    });
+    if (!res.ok) {
+      console.warn('[SP] Photo fetch failed:', filename, res.status);
+      return null;
+    }
+    var blob = await res.blob();
+    // Convertir en base64
+    return await new Promise(function(resolve, reject){
+      var reader = new FileReader();
+      reader.onloadend = function(){ resolve(reader.result); };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch(e) {
+    console.warn('[SP] getTeamPhotoDataUrl error:', e.message);
+    return null;
+  }
 }
 
 async function uploadDoc(auditId, file, stepIndex, userName) {
@@ -765,6 +837,9 @@ function syncTeamMembers() {
       short: initials,
       role: u.role || 'auditeur',
       title: title,
+      experience: u.experience || '',
+      academics: u.academics || '',
+      photoFilename: u.photoFilename || '',
     };
 
     newAVC[u.id] = palette[colorIdx % palette.length];
