@@ -2328,6 +2328,11 @@ V['planification']=()=>`
       <button class="bs" onclick="shiftYear(-1)" title="Année précédente" style="font-size:14px;padding:4px 10px;line-height:1">◀</button>
       <select id="f-pyr" onchange="renderGantt()"><option value="all">Toutes années</option><option value="2025" selected>2025</option><option value="2026">2026</option><option value="2027">2027</option><option value="2028">2028</option></select>
       <button class="bs" onclick="shiftYear(1)" title="Année suivante" style="font-size:14px;padding:4px 10px;line-height:1">▶</button>
+      <div style="display:flex;gap:14px;align-items:center;margin-left:18px;font-size:11px;color:var(--text-2)">
+        <span style="display:flex;align-items:center;gap:5px"><span style="display:inline-block;width:14px;height:10px;background:#6E58D6;border-radius:2px"></span>Process</span>
+        <span style="display:flex;align-items:center;gap:5px"><span style="display:inline-block;width:14px;height:10px;background:#14B8A6;border-radius:2px"></span>BU</span>
+        <span style="display:flex;align-items:center;gap:5px"><span style="display:inline-block;width:14px;height:10px;background:#F59E0B;border-radius:2px"></span>Autres</span>
+      </div>
       ${CU&&CU.role==='admin'?'<span style="font-size:10px;color:var(--text-3);font-style:italic;margin-left:auto">💡 Double-cliquez sur un audit pour le modifier</span>':''}
     </div>
     <div class="gw" id="gantt-wrap"></div>
@@ -2395,13 +2400,19 @@ function renderGantt(){
     var start=a.dateDebut?parseInt(a.dateDebut)-1:-1;
     var end=a.dateFin?parseInt(a.dateFin)-1:-1;
     var hasDate=start>=0&&end>=0;
-    // Couleur de la barre : par défaut palette GC, mais pour les missions Other, on prend la couleur de la catégorie
+    // Couleur de la barre selon le TYPE d'audit (3 couleurs : Process / BU / Other)
+    // Process: purple, BU: teal, Other: amber
+    // Exception : si Other a une catégorie spécifique, on garde sa couleur dédiée
     var barColor;
     if (a.type==='Other' && a.categorie) {
       var catColors = (typeof getOtherCategoryColors==='function') ? getOtherCategoryColors(a.categorie) : null;
-      barColor = catColors && catColors.gantt ? catColors.gantt : '#6B7280';
+      barColor = catColors && catColors.gantt ? catColors.gantt : '#F59E0B';
+    } else if (a.type==='Process') {
+      barColor = '#6E58D6';
+    } else if (a.type==='BU') {
+      barColor = '#14B8A6';
     } else {
-      barColor = GC[realIdx%GC.length];
+      barColor = '#F59E0B';
     }
     var cells=MO.map(function(_,m){
       var isToday=m===curMonth;
