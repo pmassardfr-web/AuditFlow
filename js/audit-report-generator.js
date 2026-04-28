@@ -379,11 +379,11 @@ async function generateAuditReportPptx(auditId) {
   });
   const phases = [
     {label: "Preparation", desc: "Mapping of existing processes and risks.", color: AR_COLORS.navy, dateKey: null},
-    {label: "Kick Off", desc: "Discussion with management:\n• Key risks\n• Stakeholders\n• Team availability", color: AR_COLORS.pink, dateKey: 'kickOff'},
+    {label: "Kick Off", desc: "Discussion with management:\n• Key risks\n• Stakeholders\n• Team availability", color: AR_COLORS.navy, dateKey: 'kickOff'},
     {label: "Interviews", desc: "Interviews with operational staff responsible for the processes.", color: AR_COLORS.navy, dateKey: 'interviews'},
     {label: "Work Pgm.", desc: "Based on interviews, narratives and Key Findings will be defined to test/analyze.", color: AR_COLORS.navy, dateKey: null},
     {label: "Docs Review", desc: "Collection of documentation to conclude on procedures.", color: AR_COLORS.navy, dateKey: 'testing'},
-    {label: "Audit Report", desc: "Presentation of identified Findings and recommendations.", color: AR_COLORS.navy, dateKey: 'report'},
+    {label: "Audit Report", desc: "Presentation of identified Findings and recommendations.", color: AR_COLORS.pink, dateKey: 'report'},
   ];
   phases.forEach((p, i) => {
     const x = 0.7 + i * 2.1;
