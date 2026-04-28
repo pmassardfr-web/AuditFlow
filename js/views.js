@@ -1443,9 +1443,14 @@ function renderPlanAuditTable(){
   var fy=document.getElementById('f-pa-year')?document.getElementById('f-pa-year').value:'all';
   var rows=AUDIT_PLAN.filter(function(a){return(ft==='all'||a.type===ft)&&(fy==='all'||String(a.annee)===fy);});
   rows=rows.slice().sort(function(a,b){
-    var sa=a.dateDebut?parseInt(a.dateDebut):99;
-    var sb=b.dateDebut?parseInt(b.dateDebut):99;
-    return sa-sb;
+    // Tri principal : année (du plus ancien au plus récent)
+    var ya = parseInt(a.annee) || 9999;
+    var yb = parseInt(b.annee) || 9999;
+    if (ya !== yb) return ya - yb;
+    // Tri secondaire : mois de début
+    var sa = a.dateDebut ? parseInt(a.dateDebut) : 99;
+    var sb = b.dateDebut ? parseInt(b.dateDebut) : 99;
+    return sa - sb;
   });
   var h='<thead><tr><th>Type</th><th>Titre</th><th>Detail</th><th style="width:140px">Année / Mois</th><th>Auditeurs</th><th>Statut</th>'+(CU&&CU.role==='admin'?'<th>Actions</th>':'')+'</tr></thead><tbody>';
   if(!rows.length){
@@ -3104,37 +3109,70 @@ function teamRender() {
   var root = document.getElementById('team-root');
   if (!root) return;
 
-  // Récupérer tous les users (sauf viewers)
-  var users = (typeof DB !== 'undefined' && DB.users) ? DB.users.filter(function(u){
-    return u.status !== 'archived' && u.role !== 'viewer';
-  }) : [];
+  // Utiliser groupUsersByName() pour dédupliquer les alias 74S/Axway
+  var grouped = (typeof groupUsersByName === 'function') ? groupUsersByName() : [];
+  // Filtrer : exclure viewers et archivés
+  var members = grouped.filter(function(g){
+    return g.role !== 'viewer' && g.status !== 'archived';
+  });
 
-  if (!users.length) {
+  if (!members.length) {
     root.innerHTML = '<div style="text-align:center;color:var(--text-3);padding:2rem">Aucun membre actif dans l\'équipe.</div>';
     return;
   }
 
+  // Pour chaque groupe, agréger photo/experience/academics depuis les alias
+  members.forEach(function(g){
+    g._photoFilename = '';
+    g._experience = '';
+    g._academics = '';
+    g._initials = '';
+    // Calculer la clé canonique (préfixe email du premier alias avec email)
+    g._canonicalKey = '';
+    (g.userIds || []).forEach(function(uid){
+      var u = (DB.users || []).find(function(x){return x.id===uid;});
+      if (!u) return;
+      // Photo : prendre la première non vide
+      if (!g._photoFilename && u.photoFilename) g._photoFilename = u.photoFilename;
+      // Experience / Academics : agréger
+      if (!g._experience && u.experience) g._experience = u.experience;
+      if (!g._academics && u.academics) g._academics = u.academics;
+      // Initiales : prendre la première dispo
+      if (!g._initials && u.initials) g._initials = u.initials;
+      // Clé canonique : préfixe email du premier user avec email
+      if (!g._canonicalKey && u.email) {
+        var em = u.email.toLowerCase().trim();
+        if (em.indexOf('@')>0) g._canonicalKey = em.split('@')[0];
+      }
+    });
+    // Fallback initials si rien trouvé
+    if (!g._initials && g.name) {
+      g._initials = g.name.split(/\s+/).map(function(w){return w.charAt(0);}).join('').toUpperCase().substring(0,2);
+    }
+    // Fallback canonical key si rien trouvé
+    if (!g._canonicalKey && g.name) {
+      g._canonicalKey = g.name.toLowerCase().replace(/[^a-z0-9]/g,'_');
+    }
+  });
+
   var html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px">';
-  users.forEach(function(u){
-    html += teamRenderCard(u);
+  members.forEach(function(g, i){
+    html += teamRenderCard(g, i);
   });
   html += '</div>';
   root.innerHTML = html;
 }
 
-function teamRenderCard(u) {
+function teamRenderCard(g, idx) {
   var html = '<div class="card" style="display:flex;flex-direction:column;align-items:center;padding:16px;text-align:center">';
 
   // Photo ou initiales
-  var photoHtml = '';
-  if (u.photoFilename) {
-    // On affiche l'image via Graph (avec un état de chargement)
-    var imgId = 'team-img-' + u.id.replace(/[^a-zA-Z0-9]/g,'_');
-    photoHtml = '<div id="'+imgId+'" style="width:100px;height:100px;border-radius:50%;background:var(--purple);display:flex;align-items:center;justify-content:center;margin-bottom:12px;overflow:hidden;color:#fff;font-size:32px;font-weight:600">'+(u.initials||'?')+'</div>';
-    // Charger asynchroniquement la photo
+  if (g._photoFilename) {
+    var imgId = 'team-img-' + idx;
+    html += '<div id="'+imgId+'" style="width:100px;height:100px;border-radius:50%;background:var(--purple);display:flex;align-items:center;justify-content:center;margin-bottom:12px;overflow:hidden;color:#fff;font-size:32px;font-weight:600">'+(g._initials||'?')+'</div>';
     setTimeout(function(){
       if (typeof getTeamPhotoDataUrl === 'function') {
-        getTeamPhotoDataUrl(u.photoFilename).then(function(dataUrl){
+        getTeamPhotoDataUrl(g._photoFilename).then(function(dataUrl){
           if (!dataUrl) return;
           var el = document.getElementById(imgId);
           if (el) el.innerHTML = '<img src="'+dataUrl+'" style="width:100%;height:100%;object-fit:cover"/>';
@@ -3142,37 +3180,67 @@ function teamRenderCard(u) {
       }
     }, 0);
   } else {
-    photoHtml = '<div style="width:100px;height:100px;border-radius:50%;background:var(--purple);display:flex;align-items:center;justify-content:center;margin-bottom:12px;color:#fff;font-size:32px;font-weight:600">'+(u.initials||'?')+'</div>';
+    html += '<div style="width:100px;height:100px;border-radius:50%;background:var(--purple);display:flex;align-items:center;justify-content:center;margin-bottom:12px;color:#fff;font-size:32px;font-weight:600">'+(g._initials||'?')+'</div>';
   }
-  html += photoHtml;
 
   // Nom
-  html += '<div style="font-size:15px;font-weight:600;color:var(--text-1)">'+u.name+'</div>';
+  html += '<div style="font-size:15px;font-weight:600;color:var(--text-1)">'+g.name+'</div>';
   // Role
-  var roleLabel = u.role === 'admin' ? 'Administrateur' : u.role === 'auditeur' ? 'Auditeur' : u.role;
+  var roleLabel = g.role === 'admin' ? 'Administrateur' : g.role === 'auditeur' ? 'Auditeur' : g.role;
   html += '<div style="font-size:11px;color:var(--text-3);font-style:italic;margin-bottom:10px">'+roleLabel+'</div>';
 
-  // Experience + Academics (preview)
-  if (u.experience) {
-    html += '<div style="font-size:10px;color:var(--text-2);text-align:left;width:100%;margin-bottom:4px"><strong>Experience:</strong> '+(u.experience.length>80?u.experience.substring(0,80)+'…':u.experience)+'</div>';
+  // Experience + Academics
+  if (g._experience) {
+    html += '<div style="font-size:10px;color:var(--text-2);text-align:left;width:100%;margin-bottom:4px"><strong>Experience:</strong> '+(g._experience.length>80?g._experience.substring(0,80)+'…':g._experience)+'</div>';
   }
-  if (u.academics) {
-    html += '<div style="font-size:10px;color:var(--text-2);text-align:left;width:100%;margin-bottom:8px"><strong>Academics:</strong> '+(u.academics.length>80?u.academics.substring(0,80)+'…':u.academics)+'</div>';
+  if (g._academics) {
+    html += '<div style="font-size:10px;color:var(--text-2);text-align:left;width:100%;margin-bottom:8px"><strong>Academics:</strong> '+(g._academics.length>80?g._academics.substring(0,80)+'…':g._academics)+'</div>';
   }
-  if (!u.experience && !u.academics) {
+  if (!g._experience && !g._academics) {
     html += '<div style="font-size:10px;color:var(--text-3);font-style:italic;margin-bottom:8px">Aucun détail renseigné</div>';
   }
 
-  // Bouton Éditer
-  html += '<button class="bs" style="font-size:11px;padding:5px 12px;margin-top:auto" onclick="teamShowEditModal(\''+u.id+'\')">Éditer le profil</button>';
+  // Stocker le groupe dans une variable globale pour que la modale d'édition puisse y accéder
+  // (on passe l'index, et on relit groupUsersByName au moment de l'édition)
+  html += '<button class="bs" style="font-size:11px;padding:5px 12px;margin-top:auto" onclick="teamShowEditModal('+idx+')">Éditer le profil</button>';
 
   html += '</div>';
   return html;
 }
 
-function teamShowEditModal(userId) {
-  var u = (DB.users || []).find(function(x){return x.id===userId;});
-  if (!u) return;
+async function teamShowEditModal(memberIdx) {
+  // Récupérer le groupe à partir de l'index dans la liste filtrée
+  var grouped = (typeof groupUsersByName === 'function') ? groupUsersByName() : [];
+  var members = grouped.filter(function(g){
+    return g.role !== 'viewer' && g.status !== 'archived';
+  });
+  var g = members[memberIdx];
+  if (!g) return;
+
+  // Recalculer les données agrégées (photo/experience/academics)
+  var photoFilename = '';
+  var experience = '';
+  var academics = '';
+  var initials = '';
+  var canonicalKey = '';
+  (g.userIds || []).forEach(function(uid){
+    var u = (DB.users || []).find(function(x){return x.id===uid;});
+    if (!u) return;
+    if (!photoFilename && u.photoFilename) photoFilename = u.photoFilename;
+    if (!experience && u.experience) experience = u.experience;
+    if (!academics && u.academics) academics = u.academics;
+    if (!initials && u.initials) initials = u.initials;
+    if (!canonicalKey && u.email) {
+      var em = u.email.toLowerCase().trim();
+      if (em.indexOf('@')>0) canonicalKey = em.split('@')[0];
+    }
+  });
+  if (!initials && g.name) {
+    initials = g.name.split(/\s+/).map(function(w){return w.charAt(0);}).join('').toUpperCase().substring(0,2);
+  }
+  if (!canonicalKey && g.name) {
+    canonicalKey = g.name.toLowerCase().replace(/[^a-z0-9]/g,'_');
+  }
 
   var body = '<div style="display:flex;flex-direction:column;gap:12px">';
 
@@ -3180,41 +3248,42 @@ function teamShowEditModal(userId) {
   body += '<div>';
   body += '<label style="font-size:11px;color:var(--text-3)">Photo</label>';
   body += '<div style="display:flex;align-items:center;gap:12px;margin-top:4px">';
-  var previewId = 'tm-photo-preview';
-  body += '<div id="'+previewId+'" style="width:80px;height:80px;border-radius:50%;background:var(--purple);display:flex;align-items:center;justify-content:center;color:#fff;font-size:24px;font-weight:600;overflow:hidden;flex-shrink:0">'+(u.initials||'?')+'</div>';
+  body += '<div id="tm-photo-preview" style="width:80px;height:80px;border-radius:50%;background:var(--purple);display:flex;align-items:center;justify-content:center;color:#fff;font-size:24px;font-weight:600;overflow:hidden;flex-shrink:0">'+(initials||'?')+'</div>';
   body += '<div style="flex:1;display:flex;flex-direction:column;gap:6px">';
   body += '<input type="file" id="tm-photo-input" accept="image/png,image/jpeg,image/gif,image/webp" style="font-size:11px"/>';
   body += '<div style="font-size:10px;color:var(--text-3);font-style:italic">PNG, JPG, GIF ou WebP. Recommandé : carré, 200×200 minimum.</div>';
-  if (u.photoFilename) {
-    body += '<div style="font-size:10px;color:var(--text-2)">Photo actuelle : '+u.photoFilename+'</div>';
+  if (photoFilename) {
+    body += '<div style="font-size:10px;color:var(--text-2)">Photo actuelle : '+photoFilename+'</div>';
   }
   body += '</div></div></div>';
 
   // Experience
   body += '<div>';
   body += '<label style="font-size:11px;color:var(--text-3)">Experience</label>';
-  body += '<textarea id="tm-experience" style="width:100%;min-height:60px;font-size:12px;padding:6px;border:1px solid var(--border);border-radius:4px;resize:vertical" placeholder="ex : 10+ years in audit, 5 years at PwC, IFRS expert...">'+(u.experience||'').replace(/</g,'&lt;')+'</textarea>';
+  body += '<textarea id="tm-experience" style="width:100%;min-height:60px;font-size:12px;padding:6px;border:1px solid var(--border);border-radius:4px;resize:vertical" placeholder="ex : 10+ years in audit, 5 years at PwC, IFRS expert...">'+(experience||'').replace(/</g,'&lt;')+'</textarea>';
   body += '</div>';
 
   // Academics
   body += '<div>';
   body += '<label style="font-size:11px;color:var(--text-3)">Academics</label>';
-  body += '<textarea id="tm-academics" style="width:100%;min-height:60px;font-size:12px;padding:6px;border:1px solid var(--border);border-radius:4px;resize:vertical" placeholder="ex : MSc Finance ESCP, CFA, CIA...">'+(u.academics||'').replace(/</g,'&lt;')+'</textarea>';
+  body += '<textarea id="tm-academics" style="width:100%;min-height:60px;font-size:12px;padding:6px;border:1px solid var(--border);border-radius:4px;resize:vertical" placeholder="ex : MSc Finance ESCP, CFA, CIA...">'+(academics||'').replace(/</g,'&lt;')+'</textarea>';
   body += '</div>';
 
   body += '</div>';
 
-  openModal('Éditer le profil — '+u.name, body, async function(){
-    var experience = document.getElementById('tm-experience').value.trim();
-    var academics = document.getElementById('tm-academics').value.trim();
+  openModal('Éditer le profil — '+g.name, body, async function(){
+    var newExperience = document.getElementById('tm-experience').value.trim();
+    var newAcademics = document.getElementById('tm-academics').value.trim();
     var photoInput = document.getElementById('tm-photo-input');
     var newPhoto = photoInput && photoInput.files && photoInput.files[0] ? photoInput.files[0] : null;
+    var newPhotoFilename = photoFilename;
 
-    // Upload photo si fournie
+    // Upload photo si fournie — on utilise la canonicalKey comme nom (partagé entre alias)
     if (newPhoto) {
       try {
         toast('Upload de la photo...');
-        await uploadTeamPhoto(userId, newPhoto);
+        var result = await uploadTeamPhoto(canonicalKey, newPhoto);
+        if (result && result.fileName) newPhotoFilename = result.fileName;
       } catch(e) {
         toast('Erreur upload photo : '+e.message);
         console.error(e);
@@ -3222,14 +3291,47 @@ function teamShowEditModal(userId) {
       }
     }
 
-    // Mettre à jour les champs texte
-    u.experience = experience;
-    u.academics = academics;
-    if (TM[u.id]) {
-      TM[u.id].experience = experience;
-      TM[u.id].academics = academics;
+    // Choisir l'alias canonique : 74Software en priorité, sinon le premier userId
+    var canonicalUserId = null;
+    (g.userIds || []).forEach(function(uid){
+      var u = (DB.users || []).find(function(x){return x.id===uid;});
+      if (!u) return;
+      if (!canonicalUserId && u.email && u.email.toLowerCase().indexOf('@74software.com')>=0) {
+        canonicalUserId = u.id;
+      }
+    });
+    if (!canonicalUserId && g.userIds && g.userIds.length) canonicalUserId = g.userIds[0];
+
+    // Sauvegarder sur l'alias canonique (saveUser SP)
+    var canonicalUser = (DB.users || []).find(function(x){return x.id===canonicalUserId;});
+    if (canonicalUser) {
+      canonicalUser.experience = newExperience;
+      canonicalUser.academics = newAcademics;
+      canonicalUser.photoFilename = newPhotoFilename;
+      await saveUser(canonicalUser);
     }
-    await saveUser(u);
+
+    // Mettre à jour TOUS les TM[id] du groupe en mémoire pour que kickoff-generator
+    // affiche la photo quel que soit l'alias assigné à l'audit
+    (g.userIds || []).forEach(function(uid){
+      if (TM[uid]) {
+        TM[uid].experience = newExperience;
+        TM[uid].academics = newAcademics;
+        TM[uid].photoFilename = newPhotoFilename;
+      }
+      // Aussi propager dans DB.users (en mémoire) pour que teamRender voit les nouvelles valeurs
+      var u = (DB.users || []).find(function(x){return x.id===uid;});
+      if (u) {
+        // Pour les non-canoniques, on laisse les champs SP vides mais on sync en mémoire
+        // pour que tout reflète la même chose à l'écran
+        if (uid !== canonicalUserId) {
+          u.experience = u.experience || newExperience;
+          u.academics = u.academics || newAcademics;
+          u.photoFilename = u.photoFilename || newPhotoFilename;
+        }
+      }
+    });
+
     toast('Profil mis à jour ✓');
     teamRender();
   });
