@@ -3888,6 +3888,9 @@ function renderDocumentRow(label, doc, isExpected, isAdmin) {
     } else {
       html += '<span class="badge bdn" style="font-size:9px;padding:3px 7px">✓ Revu</span>';
     }
+    if (doc.driveId && doc.itemId) {
+      html += '<button class="bs" style="font-size:10px;padding:3px 6px;background:#EEEDFE;color:#3C3489;border-color:#CECBF6" onclick="openDocByDriveItem(\''+doc.driveId+'\',\''+doc.itemId+'\',\''+(doc.name||'').replace(/'/g,"\\'")+'\',\''+(doc.url||'').replace(/'/g,"\\'")+'\')" title="Voir">👁</button>';
+    }
     html += '<button class="bs" style="font-size:10px;padding:3px 6px" onclick="downloadDoc(\''+doc.id+'\')" title="Télécharger">⬇</button>';
     html += '<button class="bd" style="font-size:10px;padding:3px 6px" onclick="removeDoc(\''+doc.id+'\')" title="Supprimer">×</button>';
   }
@@ -5464,6 +5467,15 @@ async function unmarkDocReviewed(docIndex) {
   document.getElementById('det-content').innerHTML = renderDetContent();
   toast('Revue annulée');
 }
+// Helper visionneuse : ouvre un doc par ses driveId/itemId (pour boutons inline)
+function openDocByDriveItem(driveId, itemId, name, url) {
+  if (typeof openDocViewer === 'function') {
+    openDocViewer({ driveId: driveId, itemId: itemId, name: name, url: url });
+  } else {
+    toast('Visionneuse non disponible');
+  }
+}
+
 async function renameDoc(docIndex){var d=getAudData(CA);var doc=d.docs[docIndex];if(!doc)return;var newName=prompt('Nouveau nom :', doc.name);if(!newName||newName.trim()===''||newName===doc.name)return;try{await renameDocInDB(CA,docIndex,newName.trim());document.getElementById('det-content').innerHTML=renderDetContent();toast('Renommé ✓');}catch(e){toast('Erreur : '+e.message);}}
 async function replaceDoc(docIndex){var inp=document.createElement('input');inp.type='file';inp.accept='.pdf,.xlsx,.xls,.docx,.doc,.pptx,.ppt,.csv,.txt';inp.onchange=async function(){if(!inp.files.length)return;var file=inp.files[0];toast('Remplacement...');try{await replaceDocInDB(CA,docIndex,file,CS,CU?CU.name:'Inconnu');document.getElementById('det-content').innerHTML=renderDetContent();toast(file.name+' remplacé ✓');}catch(e){toast('Erreur : '+e.message);}};inp.click();}
 async function saveNotes(){var d=getAudData(CA);d.notes=document.querySelector('textarea')?document.querySelector('textarea').value:'';await saveAuditData(CA);toast('Notes sauvegardées ✓');}
@@ -5600,6 +5612,11 @@ function buildDocList(docs){
     var metaHtml = meta.length ? '<div style="font-size:10px;color:#888;padding-left:18px;margin-top:2px">'+meta.join(' · ')+'</div>' : '';
 
     var delFn = "deleteDoc(CA,'"+(f.itemId||f.path||'').replace(/'/g,"\\'")+"','"+(f.name||'').replace(/'/g,"\\'")+'\')';
+    // View button : ouvre la visionneuse intégrée
+    var viewBtn = '';
+    if (f.driveId && f.itemId) {
+      viewBtn = '<button class="bs" style="font-size:10px;padding:2px 7px;background:#EEEDFE;color:#3C3489;border-color:#CECBF6" onclick="openDocViewer(getAudData(CA).docs['+fi+'])">👁 Voir</button>';
+    }
 
     // Boutons action : bouton "Marquer revu" seulement pour admin si pas déjà revu
     var reviewBtn = '';
@@ -5616,6 +5633,7 @@ function buildDocList(docs){
         + statusBadge
         + '<span style="font-size:10px;color:#aaa;flex-shrink:0">'+(f.size||'')+'</span>'
         + reviewBtn
+        + viewBtn
         + '<button class="bs" style="font-size:10px;padding:2px 7px" onclick="renameDoc('+fi+')">Renommer</button>'
         + '<button class="bs" style="font-size:10px;padding:2px 7px" onclick="replaceDoc('+fi+')">Remplacer</button>'
         + '<button class="bd" style="font-size:10px;padding:2px 7px" onclick="'+delFn+'">Supprimer</button>'
