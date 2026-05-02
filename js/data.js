@@ -105,14 +105,9 @@ const ENT={sbs:'<span class="badge bsbs">SBS</span>',axw:'<span class="badge bax
 
 let CU=null,CV='dashboard',CA=null,CS=0,CT='roles';
 
-var USERS=[
-  {id:'pm',name:'Philippe M.',email:'pmassard@74software.com',role:'admin',status:'actif',pwd:'Audit1234!',organization_id:'00000000-0000-0000-0000-000000000001'},
-  {id:'sh',name:'Selma H.',email:'shentabli@74software.com',role:'auditeur',status:'actif',pwd:'Audit1234!',organization_id:'00000000-0000-0000-0000-000000000001'},
-  {id:'ne',name:'Nisrine E.',email:'nechah@74software.com',role:'auditeur',status:'actif',pwd:'Audit1234!',organization_id:'00000000-0000-0000-0000-000000000001'},
-  // Superadmin — à adapter avec votre email et mot de passe
-  {id:'superadmin',name:'Super Admin',email:'pmassard.fr@gmail.com',role:'superadmin',status:'actif',pwd:'Audit1234!',organization_id:'00000000-0000-0000-0000-000000000000'},
-];
-let PENDING=[];
+// USERS est rempli au chargement par loadAuthorizedUsers() depuis SharePoint (AF_Users).
+// Plus de mots de passe en dur : l'authentification passe entièrement par Entra ID (SSO).
+var USERS=[];
 let HISTORY_LOG=[];
 
 let AUDIT_PLAN=[
