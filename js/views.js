@@ -3384,7 +3384,6 @@ I['historique']=()=>{
 V['roles']=()=>`
   <div class="topbar"><div class="tbtitle">Rôles & Accès</div><button class="bp" onclick="showInviteModal()">+ Inviter</button></div>
   <div class="content">
-    ${PENDING.length?('<div style="margin-bottom:1rem"><div class="st" style="margin-bottom:.5rem">Demandes en attente ('+PENDING.length+')</div>'+PENDING.map(function(u,pi){return'<div class="card" style="margin-bottom:6px;display:flex;align-items:center;gap:10px"><div style="flex:1"><div style="font-size:12px;font-weight:500">'+u.name+'</div><div style="font-size:11px;color:var(--text-2)">'+u.email+'</div></div><button class="bp" style="font-size:11px" onclick="approveUser('+pi+')">Valider</button><button class="bd" style="font-size:11px" onclick="rejectUser('+pi+')">Refuser</button></div>';}).join('')+'</div>'):''}
     <div class="tw"><table><thead><tr><th>Membre</th><th>Email @74software.com</th><th>Email @axway.com</th><th>Rôle</th><th>Statut</th><th>Modifier</th></tr></thead><tbody id="utbl"></tbody></table></div>
     <div class="card" style="margin-top:1rem;font-size:12px;color:var(--text-2);line-height:1.8">
       <strong>Admin / Directeur</strong> — accès complet, validation des étapes, gestion du Plan Audit et des utilisateurs.<br>
@@ -3522,21 +3521,29 @@ function changeRole(i,r){
   renderUsersTbl();
   toast('Rôle mis à jour');
 }
-function approveUser(i){var u=PENDING[i];u.status='actif';USERS.push(u);PENDING.splice(i,1);addHist('add','Accès validé pour '+u.name);nav('roles');toast('Accès accordé à '+u.name+' ✓');}
-function rejectUser(i){var u=PENDING[i];PENDING.splice(i,1);addHist('del','Demande refusée pour '+u.name);nav('roles');toast('Refusé');}
 function showInviteModal(){
   openModal('Inviter un membre',
-    '<div><label>Prénom Nom</label><input id="iv-nm" placeholder="ex : Jean Martin"/></div>'
-    +'<div><label>Email</label><input id="iv-em" placeholder="jean@groupe.com"/></div>'
-    +'<div><label>Mot de passe provisoire</label><input id="iv-pw" type="password" placeholder="••••••••"/></div>'
-    +'<div><label>Rôle</label><select id="iv-rl"><option value="admin">Admin / Directeur</option><option value="auditeur" selected>Auditrice</option><option value="audite">Audité</option></select></div>',
-    function(){
+    '<div style="font-size:12px;color:var(--text-2);margin-bottom:.75rem;line-height:1.5">'
+    +'L\'utilisateur doit déjà avoir un compte Microsoft de l\'entreprise. '
+    +'Une fois ajouté, il pourra se connecter immédiatement avec son compte SSO.</div>'
+    +'<div><label>Prénom Nom</label><input id="iv-nm" placeholder="ex : Jean Martin"/></div>'
+    +'<div><label>Email professionnel</label><input id="iv-em" placeholder="jean.martin@74software.com"/></div>'
+    +'<div><label>Rôle</label><select id="iv-rl"><option value="admin">Admin / Directeur</option><option value="auditeur" selected>Auditeur(rice)</option><option value="viewer">Observateur (lecture seule)</option></select></div>',
+    async function(){
       var name=document.getElementById('iv-nm').value.trim();
       var email=document.getElementById('iv-em').value.trim();
-      var pwd=document.getElementById('iv-pw').value;
-      if(!name||!email||!pwd){toast('Champs obligatoires');return;}
-      USERS.push({id:'u'+Date.now(),name,email,pwd,role:document.getElementById('iv-rl').value,status:'actif'});
-      addHist('add',name+' invité(e)');renderUsersTbl();toast(name+' ajouté(e) ✓');
+      var role=document.getElementById('iv-rl').value;
+      if(!name||!email){toast('Nom et email obligatoires');return;}
+      if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){toast('Email invalide');return;}
+      try {
+        await inviteUser(email, name, role);
+        addHist('add', name+' invité(e)');
+        renderUsersTbl();
+        toast(name+' ajouté(e) ✓');
+      } catch(e) {
+        console.error('inviteUser error:', e);
+        toast('Erreur lors de l\'ajout : '+(e.message||'inconnue'));
+      }
     });
 }
 
@@ -5815,67 +5822,22 @@ V['profil']=()=>`
         <div>
           <div style="font-size:15px;font-weight:600;">${CU?CU.name:'—'}</div>
           <div style="font-size:12px;color:var(--text-2);">${CU?CU.email:'—'}</div>
-          <div style="font-size:11px;color:var(--text-3);margin-top:2px;">${CU&&CU.role==='admin'?'Admin / Directeur':'Auditeur'}</div>
+          <div style="font-size:11px;color:var(--text-3);margin-top:2px;">${CU&&CU.role==='admin'?'Admin / Directeur':CU&&CU.role==='viewer'?'Observateur':'Auditeur(rice)'}</div>
         </div>
       </div>
-      <div style="font-size:13px;font-weight:600;margin-bottom:.875rem;">Changer le mot de passe</div>
-      <div style="display:flex;flex-direction:column;gap:10px;">
-        <div>
-          <label class="f-lbl">Mot de passe actuel</label>
-          <input type="password" id="pw-current" class="f-inp" style="width:100%;" placeholder="••••••••"/>
-        </div>
-        <div>
-          <label class="f-lbl">Nouveau mot de passe</label>
-          <input type="password" id="pw-new" class="f-inp" style="width:100%;" placeholder="8 car. min., 1 majuscule, 1 spécial"/>
-        </div>
-        <div>
-          <label class="f-lbl">Confirmer le nouveau mot de passe</label>
-          <input type="password" id="pw-confirm" class="f-inp" style="width:100%;" placeholder="••••••••"/>
-        </div>
-        <div id="pw-error" style="display:none;font-size:12px;color:var(--red);background:var(--red-lt);padding:6px 10px;border-radius:6px;"></div>
-        <button class="bp" style="width:100%;margin-top:4px;" onclick="changePassword()">Enregistrer le nouveau mot de passe</button>
+      <div style="font-size:13px;font-weight:600;margin-bottom:.5rem;">Sécurité du compte</div>
+      <div style="font-size:12px;color:var(--text-2);line-height:1.6;margin-bottom:1rem;">
+        Votre accès à AuditFlow utilise le compte Microsoft de l'entreprise (SSO Entra ID).
+        La gestion du mot de passe, de l'authentification multi-facteur (MFA) et des appareils
+        de confiance se fait dans le portail Microsoft.
       </div>
+      <a href="https://mysignins.microsoft.com/security-info" target="_blank" rel="noopener noreferrer"
+         class="bp" style="display:inline-flex;align-items:center;gap:6px;text-decoration:none;width:auto;">
+        🔐 Gérer mon compte Microsoft
+      </a>
     </div>
   </div>`;
 I['profil']=()=>{};
-
-async function changePassword(){
-  var current =document.getElementById('pw-current').value;
-  var newPwd   =document.getElementById('pw-new').value;
-  var confirm2 =document.getElementById('pw-confirm').value;
-  var errEl    =document.getElementById('pw-error');
-  errEl.style.display='none';
-
-  var user=USERS.find(function(u){return u.id===CU.id;});
-  if(!user||user.pwd!==current){
-    errEl.textContent='Mot de passe actuel incorrect.';
-    errEl.style.display='block';
-    return;
-  }
-  if(newPwd.length<8||!/[A-Z]/.test(newPwd)||!/[^a-zA-Z0-9]/.test(newPwd)){
-    errEl.textContent='Le nouveau mot de passe doit contenir 8 caractères min., 1 majuscule et 1 caractère spécial.';
-    errEl.style.display='block';
-    return;
-  }
-  if(newPwd!==confirm2){
-    errEl.textContent='Les mots de passe ne correspondent pas.';
-    errEl.style.display='block';
-    return;
-  }
-  // Mettre à jour en mémoire
-  user.pwd=newPwd;
-  CU.pwd=newPwd;
-  sessionStorage.setItem('af_user',JSON.stringify(CU));
-  // Mettre à jour en base
-  try {
-    var userObj=USERS.find(function(u){return u.id===CU.id;});
-    if(userObj) await saveUser(userObj);
-  } catch(e){ console.warn('pwd update:',e); }
-  toast('Mot de passe mis à jour ✓');
-  document.getElementById('pw-current').value='';
-  document.getElementById('pw-new').value='';
-  document.getElementById('pw-confirm').value='';
-}
 
 // ══════════════════════════════════════════════════════════════
 //  EXPORT PDF
