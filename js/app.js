@@ -315,11 +315,28 @@ function openModal(title, body, onOk, opts) {
     if (opts.wide) modalContainer.classList.add('md-wide');
     else modalContainer.classList.remove('md-wide');
   }
+  // Bouton OK : on peut le cacher (modale informative / lecture-seule)
+  var okBtn = document.getElementById('mok');
+  if (okBtn) {
+    if (opts.hideOk) {
+      okBtn.style.display = 'none';
+      okBtn.onclick = null;
+    } else {
+      okBtn.style.display = '';
+      okBtn.onclick = async function() {
+        if (typeof onOk === 'function') await onOk();
+        closeModal();
+      };
+    }
+  }
+  // Label du bouton Annuler/Fermer (par défaut "Annuler")
+  var cancelBtn = document.getElementById('mcancel');
+  if (cancelBtn && opts.cancelLabel) {
+    cancelBtn.textContent = opts.cancelLabel;
+  } else if (cancelBtn) {
+    cancelBtn.textContent = 'Annuler';
+  }
   document.getElementById('modal').classList.add('show');
-  document.getElementById('mok').onclick = async function() {
-    await onOk();
-    closeModal();
-  };
 }
 function closeModal() { document.getElementById('modal').classList.remove('show'); }
 function toast(msg) {
