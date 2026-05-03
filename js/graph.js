@@ -234,6 +234,7 @@ var LIST_SCHEMAS = {
     {name:'risks_json',text:{}},{name:'y25_json',text:{}},{name:'y26_json',text:{}},
     {name:'y27_json',text:{}},{name:'y28_json',text:{}},
     {name:'risk_refs_json',text:{}},
+    {name:'sub_processes_json',text:{}},
   ],
   AF_Actions: [
     {name:'af_id',text:{}},{name:'title',text:{}},{name:'audit',text:{}},
@@ -396,7 +397,8 @@ async function loadAllData() {
       id:f.af_id, dom:f.dom, proc:f.proc||f.Title, risk:parseInt(f.risk)||1,
       riskLevel:f.risk_level||'faible', archived:f.archived||false,
       risks:tryParse(f.risks_json,[]),
-      riskRefs: tryParse(f.risk_refs_json, []), // NOUVEAU — IDs de risques du Risk Universe
+      riskRefs: tryParse(f.risk_refs_json, []), // IDs de risques du Risk Universe
+      subProcesses: tryParse(f.sub_processes_json, []), // Sous-processus avec leur programme de tests (Phase 1)
       y25:tryParse(f.y25_json,null), y26:tryParse(f.y26_json,null),
       y27:tryParse(f.y27_json,null), y28:tryParse(f.y28_json,null),
     };});
@@ -762,6 +764,28 @@ function tryParse(str, fallback) {
   if (!str) return fallback;
   if (typeof str==='object') return str;
   try { return JSON.parse(str); } catch(e) { return fallback; }
+}
+
+// Helper centralisé pour sauvegarder un Process complet dans SharePoint.
+// Évite d'éparpiller la liste des champs dans chaque setter du Process.
+// Usage : await saveProcessFull(processObj);
+async function saveProcessFull(p) {
+  if (!p || !p.id) return;
+  try {
+    await spUpsert('AF_Processes', p.id, {
+      dom: p.dom || '',
+      proc: p.proc || '',
+      risk: p.risk || 1,
+      risk_level: p.riskLevel || 'faible',
+      archived: p.archived || false,
+      risks_json: JSON.stringify(p.risks || []),
+      risk_refs_json: JSON.stringify(p.riskRefs || []),
+      sub_processes_json: JSON.stringify(p.subProcesses || []),
+      Title: p.proc || '',
+    });
+  } catch (e) {
+    console.warn('[saveProcessFull] error for', p.id, ':', e.message);
+  }
 }
 
 async function loadAuthorizedUsers() {
