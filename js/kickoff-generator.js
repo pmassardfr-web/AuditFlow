@@ -143,6 +143,11 @@ async function generateKickoffPptx(auditId) {
     }
   }
 
+  // Liens risque ↔ sous-processus : { riskId: [subProcessName, ...] }
+  // Saisis dans l'app (étape Work Program → badges sous chaque risque).
+  const subProcessRiskLinks = (d && typeof d.subProcessRiskLinks === 'object' && d.subProcessRiskLinks !== null)
+    ? d.subProcessRiskLinks : {};
+
   // Récupérer les auditeurs (TM est un objet {id: {name, role, photoFilename, experience, academics}})
   const auditeurIds = Array.isArray(ap.auditeurs) ? ap.auditeurs : [];
   const auditeurs = auditeurIds.map(id => {
@@ -373,41 +378,48 @@ async function generateKickoffPptx(auditId) {
     {text: "Associated risks", options: {bold: true, color: KO_COLORS.white, fill: {color: KO_COLORS.navy}, valign: "middle"}},
   ];
 
-  // Préparer la colonne risques : tous les risques de l'audit sont au niveau process,
-  // on les affiche tous dans la cellule de la 1ère ligne et — pour les suivantes.
-  // Construit en text array (paragraphes) pour mettre les pucces.
-  let risksCellContent;
-  if (linkedRisks.length) {
-    const displayRisks = linkedRisks.slice(0, 8);
-    const riskParas = [];
-    riskParas.push({
-      text: "All process risks",
-      options: { fontSize: 9, italic: true, color: KO_COLORS.textGray, fontFace: "Calibri", paraSpaceAfter: 4 },
-    });
-    displayRisks.forEach((r, i) => {
+  // Helper : transforme une liste de risques en paragraphes pour une cellule de tableau
+  function risksToParas(rs) {
+    if (!rs || !rs.length) {
+      return [{ text: '—', options: { fontSize: 11, color: KO_COLORS.textGray, fontFace: "Calibri" } }];
+    }
+    const max = 6;
+    const paras = rs.slice(0, max).map((r, i) => {
       const title = r.title || r.name || r.label || '—';
       const sourceTag = r.source === 'adhoc' ? ' [Ad hoc]' : '';
-      riskParas.push({
+      return {
         text: title + sourceTag,
         options: {
           bullet: { code: "25CF" },
           fontSize: 11,
           color: KO_COLORS.textDark,
           fontFace: "Calibri",
-          paraSpaceAfter: i === displayRisks.length - 1 ? 0 : 3,
+          paraSpaceAfter: i === Math.min(rs.length, max) - 1 ? 0 : 3,
         },
-      });
+      };
     });
-    if (linkedRisks.length > 8) {
-      riskParas.push({
-        text: `… and ${linkedRisks.length - 8} more`,
+    if (rs.length > max) {
+      paras.push({
+        text: `… and ${rs.length - max} more`,
         options: { fontSize: 10, italic: true, color: KO_COLORS.textGray, fontFace: "Calibri" },
       });
     }
-    risksCellContent = riskParas;
-  } else {
-    risksCellContent = [{ text: "—", options: { fontSize: 11, color: KO_COLORS.textGray, fontFace: "Calibri" } }];
+    return paras;
   }
+
+  // Calculer pour chaque sous-process les risques liés via subProcessRiskLinks,
+  // et identifier les risques non liés (pour la ligne "General process risks").
+  const linkedRiskIds = new Set();
+  const risksBySubProcess = subProcesses.map(sp => {
+    const spName = sp.name || '';
+    const spRisks = linkedRisks.filter(r => {
+      const linkedSps = subProcessRiskLinks[r.id] || [];
+      return linkedSps.indexOf(spName) >= 0;
+    });
+    spRisks.forEach(r => linkedRiskIds.add(r.id));
+    return spRisks;
+  });
+  const generalRisks = linkedRisks.filter(r => !linkedRiskIds.has(r.id));
 
   let subRows;
   if (subProcesses.length) {
@@ -434,26 +446,36 @@ async function generateKickoffPptx(auditId) {
           options: { fontSize: 9, italic: true, color: KO_COLORS.textGray, fontFace: "Calibri" },
         });
       }
-      // Cellule risques : remplie sur la 1ère ligne, vide sur les suivantes
-      const risksCell = (idx === 0)
-        ? { text: risksCellContent, options: { valign: "top", color: KO_COLORS.textDark } }
-        : { text: '', options: { valign: "top" } };
       return [
         { text: cellParas, options: { valign: "top" } },
-        risksCell,
+        { text: risksToParas(risksBySubProcess[idx]), options: { valign: "top" } },
       ];
     }));
+    // Ligne "General process risks" en bas si des risques ne sont liés à aucun sous-process
+    if (generalRisks.length) {
+      subRows.push([
+        {
+          text: [
+            { text: "General process risks", options: { bold: true, fontSize: 12, color: KO_COLORS.navy, fontFace: "Calibri", paraSpaceAfter: 3 } },
+            { text: "Risks not specifically linked to a sub-process.", options: { fontSize: 10, italic: true, color: KO_COLORS.textGray, fontFace: "Calibri" } },
+          ],
+          options: { valign: "top", fill: { color: "F5F5F0" } },
+        },
+        { text: risksToParas(generalRisks), options: { valign: "top", fill: { color: "F5F5F0" } } },
+      ]);
+    }
   } else {
     subRows = [subHeader,
       [
         { text: '—', options: { valign: "middle" } },
-        { text: risksCellContent, options: { valign: "top" } },
+        { text: risksToParas(linkedRisks), options: { valign: "top" } },
       ],
     ];
   }
 
-  // Hauteur de ligne adaptée au nombre de sous-processus
-  const rowHeight = subProcesses.length > 4 ? 0.7 : 0.9;
+  // Hauteur de ligne adaptée au nombre total de lignes (sous-process + éventuelle ligne generale)
+  const totalRows = subProcesses.length + (generalRisks.length ? 1 : 0);
+  const rowHeight = totalRows > 4 ? 0.7 : 0.9;
   s5.addTable(subRows, {
     x: 0.5, y: 2.05, w: 12.3,
     fontSize: 11, fontFace: "Calibri",
